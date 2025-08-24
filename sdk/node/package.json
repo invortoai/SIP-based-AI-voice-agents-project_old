@@ -1,0 +1,27 @@
+{
+  "name": "@invorto/server",
+  "version": "0.1.0",
+  "description": "Invorto Voice AI Platform - Node.js Server SDK",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -w -p tsconfig.json",
+    "lint": "echo no-lint",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "undici": "^6.19.8",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "@types/node": "^20.11.0",
+    "@types/ws": "^8.5.10"
+  },
+  "peerDependencies": {
+    "node": ">=20.0.0"
+  }
+}

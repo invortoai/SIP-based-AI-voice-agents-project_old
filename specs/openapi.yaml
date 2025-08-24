@@ -1,0 +1,156 @@
+openapi: 3.0.3
+info:
+  title: Invorto Voice AI Platform API
+  version: 1.0.0
+  description: REST API for managing agents, calls, metrics, and artifacts
+servers:
+  - url: https://api.invorto.ai
+    description: Production
+  - url: http://localhost:8080
+    description: Local Dev
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /v1/agents:
+    post:
+      summary: Create agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                config:
+                  type: object
+              required: [name, config]
+      responses:
+        '200':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  version:
+                    type: integer
+  /v1/agents/{id}:
+    get:
+      summary: Get agent
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Agent
+    patch:
+      summary: Update agent
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated
+  /v1/calls:
+    post:
+      summary: Start outbound call
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                agentId:
+                  type: string
+                to:
+                  type: string
+                from:
+                  type: string
+                metadata:
+                  type: object
+              required: [agentId, to]
+      responses:
+        '200':
+          description: Call created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  status:
+                    type: string
+  /v1/calls/{id}:
+    get:
+      summary: Get call by id
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Call details
+  /v1/calls/{id}/artifacts:
+    get:
+      summary: Get signed URLs for call artifacts
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Signed URLs
+  /v1/calls/{id}/timeline:
+    get:
+      summary: Get call timeline events
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Timeline
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string

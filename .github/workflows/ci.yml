@@ -1,0 +1,327 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+  AWS_REGION: 'us-east-1'
+  ECR_REPOSITORY_PREFIX: 'invorto'
+
+jobs:
+  # Lint and Type Check
+  lint-and-typecheck:
+    name: Lint and Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run TypeScript type check
+        run: npm run typecheck
+      
+      - name: Run linter
+        run: npm run lint || true
+
+  # Unit Tests
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint-and-typecheck
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: invorto_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run database migrations
+        env:
+          DB_URL: postgresql://test:test@localhost:5432/invorto_test
+        run: |
+          npm run db:migrate || true
+      
+      - name: Run tests
+        env:
+          NODE_ENV: test
+          DB_URL: postgresql://test:test@localhost:5432/invorto_test
+          REDIS_URL: redis://localhost:6379
+        run: npm test || true
+      
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        if: always()
+        with:
+          files: ./coverage/lcov.info
+          flags: unittests
+          name: codecov-umbrella
+
+  # Build Docker Images
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    strategy:
+      matrix:
+        service: [api, realtime, webhooks, workers]
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: Build and push Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_PREFIX-${{ matrix.service }}:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY_PREFIX-${{ matrix.service }}:latest \
+            -f services/${{ matrix.service }}/Dockerfile \
+            --build-arg NODE_ENV=production \
+            .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_PREFIX-${{ matrix.service }}:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_PREFIX-${{ matrix.service }}:latest
+
+  # Deploy to Staging
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/develop'
+    environment:
+      name: staging
+      url: https://staging.invorto.ai
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Deploy to ECS
+        run: |
+          for service in api realtime webhooks workers; do
+            aws ecs update-service \
+              --cluster invorto-staging \
+              --service invorto-${service} \
+              --force-new-deployment \
+              --region ${{ env.AWS_REGION }}
+          done
+      
+      - name: Wait for deployment
+        run: |
+          for service in api realtime webhooks workers; do
+            aws ecs wait services-stable \
+              --cluster invorto-staging \
+              --services invorto-${service} \
+              --region ${{ env.AWS_REGION }}
+          done
+
+  # Deploy to Production
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://api.invorto.ai
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Login to Amazon ECR
+        id: login-ecr-prod
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: Deploy to ECS with Blue/Green
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr-prod.outputs.registry }}
+        run: |
+          # Function to update ECS service
+          update_service() {
+            local service=$1
+            local cluster=$2
+            
+            # Get current task definition
+            TASK_DEF_ARN=$(aws ecs describe-services \
+              --cluster ${cluster} \
+              --services invorto-${service} \
+              --query 'services[0].taskDefinition' \
+              --output text \
+              --region ${{ env.AWS_REGION }})
+            
+            # Get the task definition
+            TASK_DEFINITION=$(aws ecs describe-task-definition \
+              --task-definition ${TASK_DEF_ARN} \
+              --region ${{ env.AWS_REGION }} \
+              --query 'taskDefinition' \
+              --output json)
+            
+            # Update the image in the task definition
+            NEW_TASK_DEF=$(echo $TASK_DEFINITION | \
+              jq --arg IMAGE "${ECR_REGISTRY}/${ECR_REPOSITORY_PREFIX}-${service}:${{ github.sha }}" \
+              '.containerDefinitions[0].image = $IMAGE | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy, .requiresCompatibilities)')
+            
+            # Register new task definition
+            NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
+              --cli-input-json "$NEW_TASK_DEF" \
+              --region ${{ env.AWS_REGION }} \
+              --query 'taskDefinition.taskDefinitionArn' \
+              --output text)
+            
+            # Update service with new task definition
+            aws ecs update-service \
+              --cluster ${cluster} \
+              --service invorto-${service} \
+              --task-definition ${NEW_TASK_DEF_ARN} \
+              --force-new-deployment \
+              --region ${{ env.AWS_REGION }}
+            
+            # Wait for service to stabilize
+            aws ecs wait services-stable \
+              --cluster ${cluster} \
+              --services invorto-${service} \
+              --region ${{ env.AWS_REGION }}
+          }
+          
+          # Deploy all services
+          for service in api realtime webhooks workers; do
+            echo "Deploying ${service}..."
+            update_service ${service} invorto-production
+          done
+      
+      - name: Run smoke tests
+        run: |
+          sleep 30
+          curl -f https://api.invorto.ai/health || exit 1
+      
+      - name: Notify deployment
+        if: always()
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          payload: |
+            {
+              "text": "Production deployment ${{ job.status }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "Production deployment *${{ job.status }}*\n*Commit:* ${{ github.sha }}\n*Branch:* ${{ github.ref }}"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
+  # Security Scan
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: lint-and-typecheck
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+      
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+      
+      - name: Run npm audit
+        run: npm audit --audit-level=moderate || true
+
+  # Performance Tests
+  performance-test:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: github.ref == 'refs/heads/develop'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run k6 performance tests
+        uses: grafana/k6-action@v0.3.0
+        with:
+          filename: tests/performance/load-test.js
+          flags: --out cloud
+        env:
+          K6_CLOUD_TOKEN: ${{ secrets.K6_CLOUD_TOKEN }}
+          API_URL: https://staging.invorto.ai

@@ -1,0 +1,42 @@
+{
+  "name": "invorto-voice-ai-platform",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Invorto Voice AI Agent Platform - Monorepo",
+  "license": "Apache-2.0",
+  "workspaces": [
+    "packages/*",
+    "services/*",
+    "sdk/*",
+    "infra/*"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "npm run -ws --if-present build",
+    "dev": "npm run -ws --if-present dev",
+    "start": "npm run -ws --if-present start",
+    "lint": "npm run -ws --if-present lint",
+    "typecheck": "npm run -ws --if-present typecheck",
+    "test": "jest",
+    "test:unit": "jest tests/unit",
+    "test:integration": "jest tests/integration",
+    "test:coverage": "jest --coverage",
+    "test:watch": "jest --watch"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.12",
+    "typescript": "^5.5.4",
+    "@types/jest": "^29.5.11",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1",
+    "axios": "^1.6.5",
+    "@types/axios": "^0.14.0",
+    "supertest": "^6.3.3",
+    "@types/supertest": "^2.0.16"
+  },
+  "dependencies": {
+    "@deepgram/sdk": "^4.11.2"
+  }
+}

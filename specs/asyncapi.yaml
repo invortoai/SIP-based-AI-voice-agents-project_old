@@ -1,0 +1,140 @@
+asyncapi: '2.6.0'
+info:
+  title: Invorto Realtime WS
+  version: 1.0.0
+  description: WebSocket protocol for realtime audio and events
+servers:
+  production:
+    url: wss://api.invorto.ai
+    protocol: wss
+  local:
+    url: ws://localhost:8081
+    protocol: ws
+channels:
+  /v1/realtime/{callId}:
+    parameters:
+      callId:
+        description: Call identifier
+        schema:
+          type: string
+    subscribe:
+      message:
+        oneOf:
+          - $ref: '#/components/messages/Start'
+          - $ref: '#/components/messages/Audio'
+          - $ref: '#/components/messages/ToolResult'
+    publish:
+      message:
+        oneOf:
+          - $ref: '#/components/messages/SttPartial'
+          - $ref: '#/components/messages/SttFinal'
+          - $ref: '#/components/messages/LlmDelta'
+          - $ref: '#/components/messages/ToolCall'
+          - $ref: '#/components/messages/TtsChunk'
+          - $ref: '#/components/messages/ControlBargeIn'
+          - $ref: '#/components/messages/EmotionWindow'
+          - $ref: '#/components/messages/EmotionState'
+          - $ref: '#/components/messages/End'
+components:
+  messages:
+    Start:
+      name: start
+      payload:
+        type: object
+        properties:
+          t:
+            const: start
+          callId:
+            type: string
+          agentId:
+            type: string
+          locale:
+            type: string
+    Audio:
+      name: audio
+      payload:
+        type: object
+        properties:
+          t: { const: audio }
+          seq: { type: integer }
+          pcm16: { type: string, description: base64-encoded PCM16 chunk }
+    ToolResult:
+      name: tool.result
+      payload:
+        type: object
+        properties:
+          t: { const: tool.result }
+          id: { type: string }
+          result: { type: object }
+    SttPartial:
+      name: stt.partial
+      payload:
+        type: object
+        properties:
+          t: { const: stt.partial }
+          text: { type: string }
+          ts: { type: number }
+    SttFinal:
+      name: stt.final
+      payload:
+        type: object
+        properties:
+          t: { const: stt.final }
+          text: { type: string }
+          ts: { type: number }
+    LlmDelta:
+      name: llm.delta
+      payload:
+        type: object
+        properties:
+          t: { const: llm.delta }
+          text: { type: string }
+    ToolCall:
+      name: tool.call
+      payload:
+        type: object
+        properties:
+          t: { const: tool.call }
+          id: { type: string }
+          name: { type: string }
+          args: { type: object }
+    TtsChunk:
+      name: tts.chunk
+      payload:
+        type: object
+        properties:
+          t: { const: tts.chunk }
+          seq: { type: integer }
+          pcm16: { type: string, description: base64-encoded PCM16 chunk }
+    ControlBargeIn:
+      name: control.bargein
+      payload:
+        type: object
+        properties:
+          t: { const: control.bargein }
+          action: { type: string, enum: [stop-tts] }
+    EmotionWindow:
+      name: emotion.window
+      payload:
+        type: object
+        properties:
+          t: { const: emotion.window }
+          energy_db: { type: number }
+          speaking: { type: boolean }
+    EmotionState:
+      name: emotion.state
+      payload:
+        type: object
+        properties:
+          t: { const: emotion.state }
+          class: { type: string }
+          arousal: { type: number }
+          valence: { type: number }
+          confidence: { type: number }
+    End:
+      name: end
+      payload:
+        type: object
+        properties:
+          t: { const: end }
+          reason: { type: string }
