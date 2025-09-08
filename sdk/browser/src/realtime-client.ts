@@ -141,26 +141,41 @@ export class RealtimeClient {
     
     // Handle specific message types
     switch (message.t) {
-      case 'connected':
-        this.emitEvent('connected', message);
-        break;
       case 'stt.partial':
       case 'stt.final':
         this.stats.transcriptionEvents++;
         if (this.onTranscription) {
-          this.onTranscription(message.text || '', message.t === 'stt.final');
+          this.onTranscription((message as any).text || '', message.t === 'stt.final');
         }
         break;
-      case 'tts.audio':
+      case 'llm.delta':
+      case 'tool.call':
+        // Handled via onMessage hook if consumers need it
+        break;
+      case 'tts.chunk':
         this.stats.ttsEvents++;
-        if (this.onTTS && message.audio) {
-          // Convert base64 audio to ArrayBuffer
-          const audioData = this.base64ToArrayBuffer(message.audio);
-          this.onTTS(audioData);
+        if (this.onTTS) {
+          // Handle multiple possible encodings defensively
+          const pcm = (message as any).pcm16 as Uint8Array | string | number[] | undefined;
+          let buffer: ArrayBuffer | null = null;
+          if (pcm instanceof Uint8Array) {
+            buffer = pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength);
+          } else if (Array.isArray(pcm)) {
+            buffer = new Uint8Array(pcm).buffer;
+          } else if (typeof pcm === 'string') {
+            buffer = this.base64ToArrayBuffer(pcm);
+          }
+          if (buffer) this.onTTS(buffer);
         }
         break;
-      case 'error':
-        this.stats.errors++;
+      case 'control.bargein':
+      case 'emotion.window':
+      case 'emotion.state':
+      case 'end':
+        // No-op here; exposed via onMessage and specific handlers if set
+        break;
+      default:
+        // Ignore unknown message types
         break;
     }
   }
@@ -296,7 +311,7 @@ export class RealtimeClient {
     this.sendMessage(toolResultMessage);
   }
   
-  sendDTMF(digits: string, method: string = "rfc2833"): void {
+  sendDTMF(digits: string, method: "rfc2833" | "info" = "rfc2833"): void {
     const dtmfMessage: WsInbound = {
       t: "dtmf.send",
       digits,
@@ -305,7 +320,7 @@ export class RealtimeClient {
     this.sendMessage(dtmfMessage);
   }
   
-  sendTransfer(to: string, mode: string = "blind"): void {
+  sendTransfer(to: string, mode: "blind" | "attended" = "blind"): void {
     const transferMessage: WsInbound = {
       t: "transfer",
       to,
@@ -314,34 +329,9 @@ export class RealtimeClient {
     this.sendMessage(transferMessage);
   }
   
-  sendPause(): void {
-    const pauseMessage: WsInbound = {
-      t: "pause"
-    };
-    this.sendMessage(pauseMessage);
-  }
   
-  sendResume(): void {
-    const resumeMessage: WsInbound = {
-      t: "resume"
-    };
-    this.sendMessage(resumeMessage);
-  }
   
-  sendConfig(config: Record<string, any>): void {
-    const configMessage: WsInbound = {
-      t: "config",
-      config
-    };
-    this.sendMessage(configMessage);
-  }
   
-  sendPing(): void {
-    const pingMessage: WsInbound = {
-      t: "ping"
-    };
-    this.sendMessage(pingMessage);
-  }
   
   // Call control
   async endCall(): Promise<void> {
