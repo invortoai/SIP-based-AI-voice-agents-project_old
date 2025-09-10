@@ -6,7 +6,8 @@ import { TimelinePublisher } from '../timeline/redis';
 import { JitterBuffer } from './jitterBuffer';
 import { EnergyMeter } from './energyMeter';
 import { AudioAnalyzer } from './audioAnalyzer';
-import { ToolExecutor } from '../tools/executor';
+import { AdvancedEndpointing, EndpointingConfig } from './endpointing';
+import { ToolRegistry } from '../tools/registry';
 import { WsOutbound } from '@invorto/shared';
 
 export enum ConversationState {
@@ -71,8 +72,9 @@ export class AgentRuntime extends EventEmitter {
   private jitterBuffer: JitterBuffer;
   private energyMeter: EnergyMeter;
   private audioAnalyzer: AudioAnalyzer;
+  private endpointing: AdvancedEndpointing;
 
-  private toolExecutor: ToolExecutor | null = null;
+  private toolRegistry: ToolRegistry | null = null;
 
   private conversationHistory: Turn[] = [];
   private currentTurn: Turn | null = null;
@@ -123,6 +125,14 @@ export class AgentRuntime extends EventEmitter {
       silenceThreshold: -50,
       speechThreshold: -40,
       windowSize: 1024
+    });
+
+    this.endpointing = new AdvancedEndpointing({
+      provider: this.config.endpointing?.provider || 'invorto',
+      silenceMs: this.config.endpointing?.silenceMs,
+      minWords: this.config.endpointing?.minWords,
+      confidenceThreshold: this.config.endpointing?.confidenceThreshold,
+      waitFunction: this.config.endpointing?.waitFunction
     });
 
     this.setupEventHandlers();
@@ -209,18 +219,41 @@ export class AgentRuntime extends EventEmitter {
         encoding: 'linear16'
       });
 
-      // Tool executor (optional)
+      // Tool registry (optional)
       const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-      this.toolExecutor = new ToolExecutor(redisUrl);
+      this.toolRegistry = new ToolRegistry({
+        redisUrl,
+        enableDynamicLoading: true,
+        securityValidation: true
+      });
+
+      // Load tool definitions
+      await this.toolRegistry.loadToolDefinitions();
 
       // ASR callbacks
       this.asrAdapter.onPartial((text, confidence) => {
         this.sendMessage({ t: 'stt.partial', text, confidence, ts: Date.now() } as any);
+
+        // Update endpointing with partial transcription
+        if (this.state === ConversationState.LISTENING) {
+          const endpointingResult = this.endpointing.processAudioChunk(new Float32Array(0), text);
+          if (endpointingResult.shouldEnd) {
+            console.log(`Endpointing triggered by transcription: ${endpointingResult.reason}`);
+            this.handleEndOfUtterance();
+          }
+        }
       });
       this.asrAdapter.onFinal((text, confidence, duration) => {
         this.sendMessage({ t: 'stt.final', text, confidence, duration, ts: Date.now() } as any);
-        // Treat 'final' as end of utterance for this implementation
-        this.handleUserTranscript(text).then(() => this.handleEndOfUtterance());
+
+        // Final transcription - always process
+        this.handleUserTranscript(text).then(() => {
+          // Use advanced endpointing to decide if we should end the utterance
+          const endpointingResult = this.endpointing.processAudioChunk(new Float32Array(0), text);
+          if (endpointingResult.shouldEnd || this.config.endpointing?.provider === 'off') {
+            this.handleEndOfUtterance();
+          }
+        });
       });
 
       // Also rely on Deepgram utterance end event when available
@@ -250,10 +283,20 @@ export class AgentRuntime extends EventEmitter {
     }
   }
 
-  async pushAudio(audioChunk: Uint8Array): Promise<void> {
+  async pushAudio(audioChunk: Uint8Array, sequenceNumber?: number, timestamp?: number): Promise<void> {
     if (!this.asrAdapter) return;
 
-    this.jitterBuffer.push(audioChunk);
+    // Use RTP packet structure if sequence number and timestamp provided
+    if (sequenceNumber !== undefined && timestamp !== undefined) {
+      this.jitterBuffer.push(sequenceNumber, timestamp, audioChunk);
+    } else {
+      // Fallback for legacy interface - generate sequence number and timestamp
+      const seqNum = Math.floor(Date.now() / 20) % 65536; // 16-bit sequence number
+      const ts = Date.now();
+      this.jitterBuffer.push(seqNum, ts, audioChunk);
+    }
+
+    // Try to get buffered audio for processing
     const buffered = this.jitterBuffer.pop();
     if (!buffered) return;
 
@@ -264,6 +307,20 @@ export class AgentRuntime extends EventEmitter {
     if (this.state === ConversationState.LISTENING || this.state === ConversationState.SPEAKING) {
       await this.asrAdapter.pushPcm16(buffered);
       this.usage.asrSeconds += 0.02; // ~20ms
+
+      // Convert to Float32Array for endpointing analysis
+      const floatAudio = new Float32Array(buffered.length);
+      for (let i = 0; i < buffered.length; i++) {
+        floatAudio[i] = buffered[i] / 32768; // Convert from PCM16 to float
+      }
+
+      // Check endpointing
+      const endpointingResult = this.endpointing.processAudioChunk(floatAudio);
+
+      if (endpointingResult.shouldEnd && this.state === ConversationState.LISTENING) {
+        console.log(`Endpointing triggered: ${endpointingResult.reason} (confidence: ${endpointingResult.confidence})`);
+        await this.handleEndOfUtterance();
+      }
     }
   }
 
@@ -381,8 +438,8 @@ export class AgentRuntime extends EventEmitter {
     try {
       this.usage.toolCalls++;
 
-      // Check if tool executor is available
-      if (!this.toolExecutor) {
+      // Check if tool registry is available
+      if (!this.toolRegistry) {
         await this.llmAdapter?.provideToolResult(id, { ok: false, error: 'not_configured' });
         await this.timeline.publish(this.callId, 'tool.executed', {
           name,
@@ -392,9 +449,9 @@ export class AgentRuntime extends EventEmitter {
         return;
       }
 
-      // Find tool definition in agent config
-      const toolDef = this.config.tools?.find(t => t.name === name);
-      if (!toolDef) {
+      // Get tool definition from registry
+      const toolDefinition = this.toolRegistry.getToolDefinition(name);
+      if (!toolDefinition) {
         await this.llmAdapter?.provideToolResult(id, { ok: false, error: 'no_tool_definition' });
         await this.timeline.publish(this.callId, 'tool.executed', {
           name,
@@ -404,23 +461,8 @@ export class AgentRuntime extends EventEmitter {
         return;
       }
 
-      // Create ToolDefinition for executor
-      // In a production system, these would come from a secure configuration store
-      // For now, we'll create a basic HTTP tool definition
-      const toolDefinition: import('../tools/executor').ToolDefinition = {
-        name: toolDef.name,
-        method: 'POST', // Default to POST for tool calls
-        url: `http://localhost:8080/v1/tools/${toolDef.name}`, // Default URL, should be configurable
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.openaiApiKey}` // Use API key for auth
-        },
-        inputSchema: toolDef.parameters,
-        timeoutMs: 5000
-      };
-
-      // Execute the tool
-      const result = await this.toolExecutor.execute(toolDefinition, args);
+      // Execute the tool using registry
+      const result = await this.toolRegistry.executeTool(name, args);
       
       // Send result back to LLM
       await this.llmAdapter?.provideToolResult(id, result);
@@ -569,5 +611,27 @@ export class AgentRuntime extends EventEmitter {
 
   isActive(): boolean {
     return this.state !== ConversationState.IDLE && this.state !== ConversationState.ENDING;
+  }
+
+  /**
+   * Get jitter buffer statistics for monitoring
+   */
+  getJitterBufferStats(): any {
+    return this.jitterBuffer.getStats();
+  }
+
+  /**
+   * Configure jitter buffer settings
+   */
+  configureJitterBuffer(options: {
+    adaptiveMode?: boolean;
+    plcEnabled?: boolean;
+  }): void {
+    if (options.adaptiveMode !== undefined) {
+      this.jitterBuffer.setAdaptiveMode(options.adaptiveMode);
+    }
+    if (options.plcEnabled !== undefined) {
+      this.jitterBuffer.setPlcEnabled(options.plcEnabled);
+    }
   }
 }

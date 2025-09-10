@@ -70,6 +70,19 @@ const RETRY_DELAYS = [1000, 5000, 15000]; // Exponential backoff
 const WEBHOOK_TIMEOUT = parseInt(process.env.WEBHOOK_TIMEOUT || "10000");
 const DLQ_TTL = parseInt(process.env.DLQ_TTL_DAYS || "7") * 24 * 60 * 60;
 
+// Advanced retry configuration
+const ENABLE_JITTER = process.env.ENABLE_JITTER === "true";
+const CIRCUIT_BREAKER_THRESHOLD = parseInt(process.env.CIRCUIT_BREAKER_THRESHOLD || "5");
+const CIRCUIT_BREAKER_TIMEOUT = parseInt(process.env.CIRCUIT_BREAKER_TIMEOUT || "60000"); // 1 minute
+const RATE_LIMIT_PER_MINUTE = parseInt(process.env.RATE_LIMIT_PER_MINUTE || "100");
+
+// Circuit breaker state
+const circuitBreakerState = new Map<string, {
+  failures: number;
+  lastFailure: number;
+  state: 'closed' | 'open' | 'half-open';
+}>();
+
 // Webhook job schema
 const webhookJobSchema = z.object({
   id: z.string(),
@@ -97,6 +110,113 @@ function verifySignature(body: string, signature: string, secret: string): boole
   return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
 }
 
+// Circuit breaker functions
+function getCircuitBreakerState(url: string): 'closed' | 'open' | 'half-open' {
+  const state = circuitBreakerState.get(url);
+  if (!state) return 'closed';
+
+  if (state.state === 'open') {
+    if (Date.now() - state.lastFailure > CIRCUIT_BREAKER_TIMEOUT) {
+      state.state = 'half-open';
+      return 'half-open';
+    }
+    return 'open';
+  }
+
+  return state.state;
+}
+
+function recordCircuitBreakerFailure(url: string): void {
+  const state = circuitBreakerState.get(url) || { failures: 0, lastFailure: 0, state: 'closed' as const };
+
+  state.failures++;
+  state.lastFailure = Date.now();
+
+  if (state.failures >= CIRCUIT_BREAKER_THRESHOLD) {
+    state.state = 'open';
+    structuredLogger.warn("Circuit breaker opened", { url, failures: state.failures });
+  }
+
+  circuitBreakerState.set(url, state);
+}
+
+function recordCircuitBreakerSuccess(url: string): void {
+  const state = circuitBreakerState.get(url);
+  if (state) {
+    state.failures = 0;
+    state.state = 'closed';
+    circuitBreakerState.set(url, state);
+  }
+}
+
+// Advanced retry with jitter
+function calculateRetryDelay(attempt: number, baseDelay: number): number {
+  let delay = baseDelay;
+
+  if (ENABLE_JITTER) {
+    // Add random jitter (±25%)
+    const jitter = delay * 0.25 * (Math.random() * 2 - 1);
+    delay += jitter;
+  }
+
+  return Math.min(delay, 300000); // Max 5 minutes
+}
+
+// Rate limiting
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+
+function checkRateLimit(url: string): boolean {
+  const now = Date.now();
+  const windowStart = now - 60000; // 1 minute window
+  const key = `${url}:${Math.floor(now / 60000)}`; // Per-minute key
+
+  const limit = rateLimitMap.get(key) || { count: 0, resetTime: windowStart + 60000 };
+
+  if (now > limit.resetTime) {
+    limit.count = 0;
+    limit.resetTime = windowStart + 60000;
+  }
+
+  if (limit.count >= RATE_LIMIT_PER_MINUTE) {
+    return false; // Rate limited
+  }
+
+  limit.count++;
+  rateLimitMap.set(key, limit);
+  return true;
+}
+
+// Webhook transformation
+function transformWebhookPayload(payload: any, transformation?: any): any {
+  if (!transformation) return payload;
+
+  let transformed = { ...payload };
+
+  // Apply field mappings
+  if (transformation.mappings) {
+    for (const [from, to] of Object.entries(transformation.mappings)) {
+      if (transformed[from] !== undefined) {
+        transformed[to as string] = transformed[from];
+        delete transformed[from];
+      }
+    }
+  }
+
+  // Apply field filters
+  if (transformation.filters) {
+    for (const field of transformation.filters) {
+      delete transformed[field];
+    }
+  }
+
+  // Apply field additions
+  if (transformation.additions) {
+    transformed = { ...transformed, ...transformation.additions };
+  }
+
+  return transformed;
+}
+
 // Health & Prometheus metrics
 app.get("/health", async () => ({ ok: true, service: "webhooks" }));
 
@@ -118,17 +238,36 @@ app.get("/metrics", async (req, reply) => {
 app.post("/dispatch", async (req, reply) => {
   const span = createSpan("webhook_dispatch");
   try {
-    const { url, payload, headers = {}, hmacSecret } = (req.body as any) || {};
-    
+    const { url, payload, headers = {}, hmacSecret, transformation, priority = 1 } = (req.body as any) || {};
+
     if (!url) {
       return reply.code(400).send({ code: "bad_request", message: "url required" });
     }
-    
+
+    // Check rate limit
+    if (!checkRateLimit(url)) {
+      customMetrics.incrementCounter("webhook_rate_limited");
+      return reply.code(429).send({ code: "rate_limited", message: "Rate limit exceeded" });
+    }
+
+    // Check circuit breaker
+    const circuitState = getCircuitBreakerState(url);
+    if (circuitState === 'open') {
+      customMetrics.incrementCounter("webhook_circuit_open");
+      return reply.code(503).send({ code: "circuit_open", message: "Circuit breaker is open" });
+    }
+
+    // Transform payload if transformation is provided
+    let processedPayload = payload;
+    if (transformation) {
+      processedPayload = transformWebhookPayload(payload, transformation);
+    }
+
     // Redact PII from payload
-    const sanitizedPayload = piiRedactor.redact(payload);
+    const sanitizedPayload = piiRedactor.redact(processedPayload);
     const body = JSON.stringify(sanitizedPayload ?? {});
     const signature = generateSignature(body, hmacSecret || WEBHOOK_SECRET);
-    
+
     const job: WebhookJob = {
       id: crypto.randomUUID(),
       url,
@@ -138,19 +277,22 @@ app.post("/dispatch", async (req, reply) => {
         "x-webhook-signature": signature,
         "x-webhook-timestamp": Date.now().toString(),
         "x-webhook-id": crypto.randomUUID(),
+        "x-webhook-priority": priority.toString(),
         ...headers,
       },
       attempts: 0,
       createdAt: new Date().toISOString(),
       hmacSecret: hmacSecret || WEBHOOK_SECRET,
     };
-    
-    await redis.lpush("webhooks:queue", JSON.stringify(job));
-    
+
+    // Use priority queue if priority > 1
+    const queueName = priority > 1 ? `webhooks:priority:${priority}` : "webhooks:queue";
+    await redis.lpush(queueName, JSON.stringify(job));
+
     try { webhookCounters.inc({ event: "queued" }); } catch {}
-    structuredLogger.info("Webhook queued", { jobId: job.id, url });
-    
-    return { ok: true, queued: true, jobId: job.id };
+    structuredLogger.info("Webhook queued", { jobId: job.id, url, priority });
+
+    return { ok: true, queued: true, jobId: job.id, priority };
   } catch (err) {
     recordException(err as Error, span);
     const e = err as any;
@@ -316,10 +458,21 @@ async function webhookWorker() {
         await redis.lpush("webhooks:queue", item);
       }
       
-      // Process main queue
-      const result = await redis.brpop("webhooks:queue", 5);
-      if (!result) continue;
-      
+      // Process priority queues first (highest priority first)
+      let result = null;
+      const priorityQueues = ["webhooks:priority:5", "webhooks:priority:4", "webhooks:priority:3", "webhooks:priority:2"];
+
+      for (const queue of priorityQueues) {
+        result = await redis.brpop(queue, 1);
+        if (result) break;
+      }
+
+      // If no priority jobs, process main queue
+      if (!result) {
+        result = await redis.brpop("webhooks:queue", 5);
+        if (!result) continue;
+      }
+
       const [, rawJob] = result;
       let job: WebhookJob;
       
@@ -333,24 +486,38 @@ async function webhookWorker() {
         continue;
       }
       
+      // Check circuit breaker before attempting delivery
+      const circuitState = getCircuitBreakerState(job.url);
+      if (circuitState === 'open') {
+        structuredLogger.warn("Skipping webhook due to open circuit breaker", {
+          jobId: job.id,
+          url: job.url
+        });
+        await redis.lpush("webhooks:dlq", JSON.stringify(job));
+        continue;
+      }
+
       // Execute webhook
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT);
-        
+
         const response = await fetch(job.url, {
           method: "POST",
           headers: job.headers,
           body: job.body,
           signal: controller.signal,
         });
-        
+
         clearTimeout(timeout);
-        
+
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-        
+
+        // Record success for circuit breaker
+        recordCircuitBreakerSuccess(job.url);
+
         structuredLogger.info("Webhook delivered successfully", {
           jobId: job.id,
           url: job.url,
@@ -359,51 +526,57 @@ async function webhookWorker() {
         });
         try { webhookCounters.inc({ event: "delivered" }); } catch {}
         customMetrics.recordHistogram("webhook_delivery_time_ms", Date.now() - parseInt(job.createdAt || "0"));
-        
+
         // Store success metrics
         await redis.hincrby("webhooks:metrics:success", new Date().toISOString().split("T")[0], 1);
-        
+
       } catch (err: any) {
+        // Record failure for circuit breaker
+        recordCircuitBreakerFailure(job.url);
+
         job.attempts = (job.attempts || 0) + 1;
         job.lastError = err.message || "Unknown error";
-        
+
         structuredLogger.warn("Webhook delivery failed", {
           jobId: job.id,
           url: job.url,
           attempts: job.attempts,
           error: job.lastError,
+          circuitState: getCircuitBreakerState(job.url),
         });
         try { webhookCounters.inc({ event: "failed" }); } catch {}
-        
+
         if (job.attempts < MAX_RETRIES) {
-          // Schedule retry with exponential backoff
-          const delay = RETRY_DELAYS[job.attempts - 1] || RETRY_DELAYS[RETRY_DELAYS.length - 1];
+          // Schedule retry with advanced backoff (including jitter)
+          const baseDelay = RETRY_DELAYS[job.attempts - 1] || RETRY_DELAYS[RETRY_DELAYS.length - 1];
+          const delay = calculateRetryDelay(job.attempts, baseDelay);
           const retryAt = Date.now() + delay;
           job.scheduledFor = retryAt;
-          
+
           await redis.zadd("webhooks:retry", retryAt, JSON.stringify(job));
-          
-          app.log.info({ 
-            jobId: job.id, 
+
+          app.log.info({
+            jobId: job.id,
             retryAt: new Date(retryAt).toISOString(),
             attempts: job.attempts,
+            delayMs: delay,
           }, "Webhook scheduled for retry");
-          
+
         } else {
           // Move to DLQ
           await redis.lpush("webhooks:dlq", JSON.stringify(job));
           await redis.expire(`webhooks:dlq`, DLQ_TTL);
-          
-          app.log.error({ 
-            jobId: job.id, 
+
+          app.log.error({
+            jobId: job.id,
             url: job.url,
             attempts: job.attempts,
           }, "Webhook moved to DLQ after max retries");
-          
+
           // Store failure metrics
           await redis.hincrby("webhooks:metrics:dlq", new Date().toISOString().split("T")[0], 1);
         }
-        
+
         // Store retry metrics
         await redis.hincrby("webhooks:metrics:retries", new Date().toISOString().split("T")[0], 1);
       }

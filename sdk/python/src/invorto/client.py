@@ -550,3 +550,48 @@ class AsyncInvortoClient(InvortoClient):
         """List calls asynchronously."""
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self.list_calls, options)
+
+    async def update_call_status_async(self, call_id: str, status: str, metadata: Optional[Dict[str, Any]] = None) -> Call:
+        """Update call status asynchronously."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.update_call_status, call_id, status, metadata)
+
+    async def get_call_timeline_async(self, call_id: str) -> List[TimelineEvent]:
+        """Get call timeline asynchronously."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.get_call_timeline, call_id)
+
+    async def get_call_artifacts_async(self, call_id: str) -> CallArtifacts:
+        """Get call artifacts asynchronously."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.get_call_artifacts, call_id)
+
+    async def get_tenant_usage_async(self, tenant_id: str, period: str = "24h") -> TenantUsage:
+        """Get tenant usage asynchronously."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.get_tenant_usage, tenant_id, period)
+
+    async def get_call_analytics_async(self, call_id: str) -> CallAnalytics:
+        """Get call analytics asynchronously."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.get_call_analytics, call_id)
+
+    async def update_agent_async(self, agent_id: str, updates: Dict[str, Any]) -> Agent:
+        """Update agent asynchronously."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.update_agent, agent_id, updates)
+
+    async def delete_agent_async(self, agent_id: str) -> Dict[str, Any]:
+        """Delete agent asynchronously."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.delete_agent, agent_id)
+
+    async def health_check_async(self) -> Dict[str, Any]:
+        """Health check asynchronously."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.health_check)
+
+    async def get_metrics_async(self) -> str:
+        """Get metrics asynchronously."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.get_metrics)

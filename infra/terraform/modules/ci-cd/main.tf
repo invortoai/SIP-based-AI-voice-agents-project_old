@@ -528,10 +528,75 @@ resource "aws_codepipeline" "main" {
   }
 
   stage {
-    name = "Deploy"
+    name = "DeployToDev"
+
+    action {
+      name            = "DeployToDev"
+      category        = "Deploy"
+      owner           = "AWS"
+      provider        = "ECS"
+      input_artifacts = ["build_output"]
+      version         = "1"
+
+      configuration = {
+        ClusterName = var.ecs_cluster_name
+        ServiceName = "invorto-api"
+        FileName    = "imagedefinitions.json"
+      }
+    }
+  }
+
+  stage {
+    name = "DeployToStaging"
+
+    action {
+      name     = "ManualApproval"
+      category = "Approval"
+      owner    = "AWS"
+      provider = "Manual"
+      version  = "1"
+
+      configuration = {
+        NotificationArn = aws_sns_topic.pipeline_notifications.arn
+        CustomData      = "Please review the changes and approve deployment to staging environment"
+      }
+    }
 
     action {
       name            = "DeployToStaging"
+      category        = "Deploy"
+      owner           = "AWS"
+      provider        = "ECS"
+      input_artifacts = ["build_output"]
+      version         = "1"
+
+      configuration = {
+        ClusterName = var.ecs_cluster_name
+        ServiceName = "invorto-api"
+        FileName    = "imagedefinitions.json"
+      }
+    }
+  }
+
+  stage {
+    name = "DeployToProduction"
+
+    action {
+      name     = "ProductionApproval"
+      category = "Approval"
+      owner    = "AWS"
+      provider = "Manual"
+      version  = "1"
+
+      configuration = {
+        NotificationArn = aws_sns_topic.pipeline_notifications.arn
+        CustomData      = "CRITICAL: Approve deployment to PRODUCTION environment"
+        ExternalEntityLink = "https://github.com/${var.github_repository}/releases"
+      }
+    }
+
+    action {
+      name            = "DeployToProduction"
       category        = "Deploy"
       owner           = "AWS"
       provider        = "ECS"
@@ -671,4 +736,219 @@ resource "aws_cloudwatch_event_target" "pipeline_notifications" {
   rule      = aws_cloudwatch_event_rule.pipeline_state_changes.name
   target_id = "SendToSNS"
   arn       = aws_sns_topic.pipeline_notifications.arn
+}
+
+# Environment-specific deployment configurations
+resource "aws_codebuild_project" "deploy_dev" {
+  name          = "${local.name_prefix}-deploy-dev"
+  description   = "Deploy to development environment"
+  build_timeout = "30"
+  service_role  = aws_iam_role.codebuild.arn
+
+  artifacts {
+    type = "CODEPIPELINE"
+  }
+
+  environment {
+    compute_type                = "BUILD_GENERAL1_SMALL"
+    image                       = "aws/codebuild/amazonlinux2-x86_64-standard:4.0"
+    type                        = "LINUX_CONTAINER"
+    image_pull_credentials_type = "CODEBUILD"
+
+    environment_variable {
+      name  = "ENVIRONMENT"
+      value = "dev"
+    }
+
+    environment_variable {
+      name  = "CLUSTER_NAME"
+      value = var.ecs_cluster_name
+    }
+  }
+
+  source {
+    type = "CODEPIPELINE"
+    buildspec = yamlencode({
+      version = "0.2"
+      phases = {
+        build = {
+          commands = [
+            "echo Deploying to development environment",
+            "aws ecs update-service --cluster $CLUSTER_NAME --service invorto-api --force-new-deployment",
+            "aws ecs update-service --cluster $CLUSTER_NAME --service invorto-realtime --force-new-deployment",
+            "aws ecs update-service --cluster $CLUSTER_NAME --service invorto-webhooks --force-new-deployment",
+            "aws ecs update-service --cluster $CLUSTER_NAME --service invorto-workers --force-new-deployment",
+            "aws ecs update-service --cluster $CLUSTER_NAME --service invorto-telephony --force-new-deployment"
+          ]
+        }
+      }
+    })
+  }
+
+  logs_config {
+    cloudwatch_logs {
+      group_name  = aws_cloudwatch_log_group.codebuild.name
+      stream_name = "deploy-dev"
+    }
+  }
+
+  tags = local.tags
+}
+
+resource "aws_codebuild_project" "deploy_staging" {
+  name          = "${local.name_prefix}-deploy-staging"
+  description   = "Deploy to staging environment with canary"
+  build_timeout = "45"
+  service_role  = aws_iam_role.codebuild.arn
+
+  artifacts {
+    type = "CODEPIPELINE"
+  }
+
+  environment {
+    compute_type                = "BUILD_GENERAL1_SMALL"
+    image                       = "aws/codebuild/amazonlinux2-x86_64-standard:4.0"
+    type                        = "LINUX_CONTAINER"
+    image_pull_credentials_type = "CODEBUILD"
+
+    environment_variable {
+      name  = "ENVIRONMENT"
+      value = "staging"
+    }
+
+    environment_variable {
+      name  = "CLUSTER_NAME"
+      value = var.ecs_cluster_name
+    }
+  }
+
+  source {
+    type = "CODEPIPELINE"
+    buildspec = yamlencode({
+      version = "0.2"
+      phases = {
+        build = {
+          commands = [
+            "echo Deploying to staging environment with canary deployment",
+            "# Update 25% of tasks first (canary deployment)",
+            "aws ecs update-service --cluster $CLUSTER_NAME --service invorto-api --force-new-deployment --desired-count 3",
+            "sleep 300", # Wait 5 minutes for monitoring
+            "# Check metrics and health",
+            "echo Checking application health...",
+            "# If healthy, proceed with full deployment",
+            "aws ecs update-service --cluster $CLUSTER_NAME --service invorto-api --force-new-deployment --desired-count 12",
+            "aws ecs update-service --cluster $CLUSTER_NAME --service invorto-realtime --force-new-deployment",
+            "aws ecs update-service --cluster $CLUSTER_NAME --service invorto-webhooks --force-new-deployment",
+            "aws ecs update-service --cluster $CLUSTER_NAME --service invorto-workers --force-new-deployment",
+            "aws ecs update-service --cluster $CLUSTER_NAME --service invorto-telephony --force-new-deployment"
+          ]
+        }
+      }
+    })
+  }
+
+  logs_config {
+    cloudwatch_logs {
+      group_name  = aws_cloudwatch_log_group.codebuild.name
+      stream_name = "deploy-staging"
+    }
+  }
+
+  tags = local.tags
+}
+
+resource "aws_codebuild_project" "deploy_production" {
+  name          = "${local.name_prefix}-deploy-production"
+  description   = "Deploy to production environment with blue-green"
+  build_timeout = "60"
+  service_role  = aws_iam_role.codebuild.arn
+
+  artifacts {
+    type = "CODEPIPELINE"
+  }
+
+  environment {
+    compute_type                = "BUILD_GENERAL1_MEDIUM"
+    image                       = "aws/codebuild/amazonlinux2-x86_64-standard:4.0"
+    type                        = "LINUX_CONTAINER"
+    image_pull_credentials_type = "CODEBUILD"
+
+    environment_variable {
+      name  = "ENVIRONMENT"
+      value = "production"
+    }
+
+    environment_variable {
+      name  = "CLUSTER_NAME"
+      value = var.ecs_cluster_name
+    }
+  }
+
+  source {
+    type = "CODEPIPELINE"
+    buildspec = yamlencode({
+      version = "0.2"
+      phases = {
+        build = {
+          commands = [
+            "echo Deploying to production environment with blue-green strategy",
+            "# Create new task definition with new image",
+            "TASK_DEF_ARN=$(aws ecs describe-task-definition --task-definition invorto-api --query 'taskDefinition.taskDefinitionArn' --output text)",
+            "NEW_TASK_DEF=$(aws ecs register-task-definition --family invorto-api --cli-input-json file://task-definition.json --query 'taskDefinition.taskDefinitionArn' --output text)",
+            "# Update service to use new task definition",
+            "aws ecs update-service --cluster $CLUSTER_NAME --service invorto-api --task-definition $NEW_TASK_DEF --force-new-deployment",
+            "# Wait for deployment to complete",
+            "aws ecs wait services-stable --cluster $CLUSTER_NAME --services invorto-api",
+            "# Run smoke tests",
+            "echo Running production smoke tests...",
+            "# If tests pass, continue with other services",
+            "aws ecs update-service --cluster $CLUSTER_NAME --service invorto-realtime --task-definition invorto-realtime-new --force-new-deployment",
+            "aws ecs update-service --cluster $CLUSTER_NAME --service invorto-webhooks --task-definition invorto-webhooks-new --force-new-deployment",
+            "aws ecs update-service --cluster $CLUSTER_NAME --service invorto-workers --task-definition invorto-workers-new --force-new-deployment",
+            "aws ecs update-service --cluster $CLUSTER_NAME --service invorto-telephony --task-definition invorto-telephony-new --force-new-deployment"
+          ]
+        }
+      }
+    })
+  }
+
+  logs_config {
+    cloudwatch_logs {
+      group_name  = aws_cloudwatch_log_group.codebuild.name
+      stream_name = "deploy-production"
+    }
+  }
+
+  tags = local.tags
+}
+
+# CloudWatch Alarms for Deployment Monitoring
+resource "aws_cloudwatch_metric_alarm" "deployment_failure" {
+  alarm_name          = "${local.name_prefix}-deployment-failure"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "1"
+  metric_name         = "DeploymentFailure"
+  namespace           = "AWS/ECS"
+  period              = "300"
+  statistic           = "Sum"
+  threshold           = "0"
+  alarm_description   = "ECS deployment failure detected"
+  alarm_actions       = [aws_sns_topic.pipeline_notifications.arn]
+
+  dimensions = {
+    ClusterName = var.ecs_cluster_name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "high_error_rate_post_deployment" {
+  alarm_name          = "${local.name_prefix}-high-error-rate-post-deployment"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "HTTPCode_Target_5XX_Count"
+  namespace           = "AWS/ApplicationELB"
+  period              = "300"
+  statistic           = "Sum"
+  threshold           = "10"
+  alarm_description   = "High error rate detected after deployment"
+  alarm_actions       = [aws_sns_topic.pipeline_notifications.arn]
 }

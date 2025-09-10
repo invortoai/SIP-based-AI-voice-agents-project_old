@@ -1,74 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import { Box, Container } from '@mui/material';
+import { Box } from '@mui/material';
+
+// Pages
+import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
+
+// Placeholder pages (to be implemented)
+const Agents = () => <div>Agents Page - Coming Soon</div>;
+const Calls = () => <div>Calls Page - Coming Soon</div>;
+const Analytics = () => <div>Analytics Page - Coming Soon</div>;
+const Settings = () => <div>Settings Page - Coming Soon</div>;
 
 // Components
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
-import Dashboard from './pages/Dashboard';
-import Agents from './pages/Agents';
-import Calls from './pages/Calls';
-import Analytics from './pages/Analytics';
-import Settings from './pages/Settings';
-import Login from './pages/Login';
 
 // Context
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { ThemeProvider as CustomThemeProvider } from './contexts/ThemeContext';
-
-// Styles
-import './App.css';
-
-const theme = createTheme({
-  palette: {
-    mode: 'light',
-    primary: {
-      main: '#1976d2',
-    },
-    secondary: {
-      main: '#dc004e',
-    },
-    background: {
-      default: '#f5f5f5',
-    },
-  },
-  typography: {
-    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
-    h4: {
-      fontWeight: 600,
-    },
-    h5: {
-      fontWeight: 600,
-    },
-    h6: {
-      fontWeight: 600,
-    },
-  },
-  components: {
-    MuiCard: {
-      styleOverrides: {
-        root: {
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-          borderRadius: 12,
-        },
-      },
-    },
-    MuiButton: {
-      styleOverrides: {
-        root: {
-          borderRadius: 8,
-          textTransform: 'none',
-          fontWeight: 600,
-        },
-      },
-    },
-  },
-});
+import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 
 function AppContent() {
   const { isAuthenticated, loading } = useAuth();
+  const { theme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   if (loading) {
@@ -78,8 +33,13 @@ function AppContent() {
         justifyContent="center"
         alignItems="center"
         minHeight="100vh"
+        sx={{
+          background: theme.palette.mode === 'dark'
+            ? 'linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%)'
+            : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+        }}
       >
-        <div>Loading...</div>
+        <div style={{ color: 'white', fontSize: '18px' }}>Loading Invorto AI...</div>
       </Box>
     );
   }
@@ -90,8 +50,8 @@ function AppContent() {
 
   return (
     <Router>
-      <Box sx={{ display: 'flex' }}>
-        <Header 
+      <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+        <Header
           onMenuClick={() => setSidebarOpen(!sidebarOpen)}
           sidebarOpen={sidebarOpen}
         />
@@ -100,22 +60,29 @@ function AppContent() {
           component="main"
           sx={{
             flexGrow: 1,
-            p: 3,
             mt: 8,
             ml: sidebarOpen ? '240px' : 0,
             transition: 'margin-left 0.3s ease',
+            backgroundColor: theme.palette.background.default,
+            minHeight: '100vh'
           }}
         >
-          <Container maxWidth="xl">
-            <Routes>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/agents" element={<Agents />} />
-              <Route path="/calls" element={<Calls />} />
-              <Route path="/analytics" element={<Analytics />} />
-              <Route path="/settings" element={<Settings />} />
-            </Routes>
-          </Container>
+          <Routes>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/agents" element={<Agents />} />
+            <Route path="/agents/create" element={<Agents />} />
+            <Route path="/agents/templates" element={<Agents />} />
+            <Route path="/calls/active" element={<Calls />} />
+            <Route path="/calls/history" element={<Calls />} />
+            <Route path="/calls/analytics" element={<Calls />} />
+            <Route path="/analytics/overview" element={<Analytics />} />
+            <Route path="/analytics/performance" element={<Analytics />} />
+            <Route path="/analytics/usage" element={<Analytics />} />
+            <Route path="/settings/general" element={<Settings />} />
+            <Route path="/settings/security" element={<Settings />} />
+            <Route path="/settings/integrations" element={<Settings />} />
+          </Routes>
         </Box>
       </Box>
     </Router>
@@ -124,13 +91,11 @@ function AppContent() {
 
 function App() {
   return (
-    <ThemeProvider theme={theme}>
+    <ThemeProvider>
       <CssBaseline />
-      <CustomThemeProvider>
-        <AuthProvider>
-          <AppContent />
-        </AuthProvider>
-      </CustomThemeProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
     </ThemeProvider>
   );
 }

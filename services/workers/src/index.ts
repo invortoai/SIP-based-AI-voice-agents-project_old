@@ -234,9 +234,9 @@ async function main() {
           
         } catch (err) {
           recordException(err as Error, workerSpan);
-          const errorData = data as any;
+          const errorData = data as { callId?: string };
           structuredLogger.error("Transcription processing error", { error: err, callId: errorData?.callId });
-          
+
           // Update status to failed
           if (errorData?.callId) {
             await redis.hset(`transcription:${errorData.callId}`, {
@@ -293,7 +293,7 @@ async function main() {
           
         } catch (err) {
           recordException(err as Error, workerSpan);
-          const errorData = data as any;
+          const errorData = data as { callId?: string };
           structuredLogger.error("Cost calculation error", { error: err, callId: errorData?.callId });
         }
       } catch (err) {
@@ -305,7 +305,183 @@ async function main() {
       }
     }
   })();
-  
+
+  // Metrics aggregation worker
+  (async function metricsAggregationWorker() {
+    structuredLogger.info("Metrics aggregation worker started");
+
+    while (true) {
+      const workerSpan = createSpan("metrics_aggregation_process");
+      try {
+        const job = await redisQ.brpop("metrics:queue", 5);
+        if (!job) continue;
+
+        const [, raw] = job;
+        try {
+          const data = JSON.parse(raw);
+          const { tenantId, timeRange, metrics } = data;
+
+          // Aggregate metrics for the tenant
+          const aggregatedMetrics = await aggregateTenantMetrics(tenantId, timeRange, metrics);
+
+          // Store aggregated metrics
+          await redis.hset(`metrics:${tenantId}:${timeRange}`, {
+            data: JSON.stringify(aggregatedMetrics),
+            aggregatedAt: new Date().toISOString(),
+          });
+
+          customMetrics.incrementCounter("metrics_aggregated");
+          structuredLogger.info("Metrics aggregated", { tenantId, timeRange });
+
+        } catch (err) {
+          recordException(err as Error, workerSpan);
+          const errorData = data as { tenantId?: string };
+          structuredLogger.error("Metrics aggregation error", { error: err, tenantId: errorData?.tenantId });
+        }
+      } catch (err) {
+        recordException(err as Error, workerSpan);
+        structuredLogger.error("Metrics aggregation worker error", { error: err });
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } finally {
+        workerSpan.end();
+      }
+    }
+  })();
+
+  // Compliance worker
+  (async function complianceWorker() {
+    structuredLogger.info("Compliance worker started");
+
+    while (true) {
+      const workerSpan = createSpan("compliance_process");
+      try {
+        const job = await redisQ.brpop("compliance:queue", 5);
+        if (!job) continue;
+
+        const [, raw] = job;
+        try {
+          const data = JSON.parse(raw);
+          const { tenantId, action, data: complianceData } = data;
+
+          if (action === "gdpr_delete") {
+            await processGDPRDeletion(tenantId, complianceData);
+          } else if (action === "data_retention") {
+            await processDataRetention(tenantId, complianceData);
+          } else if (action === "audit_log") {
+            await processAuditLogging(tenantId, complianceData);
+          }
+
+          customMetrics.incrementCounter("compliance_actions_processed");
+          structuredLogger.info("Compliance action processed", { tenantId, action });
+
+        } catch (err) {
+          recordException(err as Error, workerSpan);
+          const errorData = data as { tenantId?: string };
+          structuredLogger.error("Compliance processing error", { error: err, tenantId: errorData?.tenantId });
+        }
+      } catch (err) {
+        recordException(err as Error, workerSpan);
+        structuredLogger.error("Compliance worker error", { error: err });
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } finally {
+        workerSpan.end();
+      }
+    }
+  })();
+
+  // Notification worker
+  (async function notificationWorker() {
+    structuredLogger.info("Notification worker started");
+
+    while (true) {
+      const workerSpan = createSpan("notification_process");
+      try {
+        const job = await redisQ.brpop("notifications:queue", 5);
+        if (!job) continue;
+
+        const [, raw] = job;
+        try {
+          const data = JSON.parse(raw);
+          const { type, recipient, template, data: templateData } = data;
+
+          if (type === "email") {
+            await sendEmailNotification(recipient, template, templateData);
+          } else if (type === "sms") {
+            await sendSMSNotification(recipient, template, templateData);
+          } else if (type === "push") {
+            await sendPushNotification(recipient, template, templateData);
+          }
+
+          customMetrics.incrementCounter("notifications_sent", { type });
+          structuredLogger.info("Notification sent", { type, recipient });
+
+        } catch (err) {
+          recordException(err as Error, workerSpan);
+          const errorData = data as { type?: string };
+          structuredLogger.error("Notification processing error", { error: err, type: errorData?.type });
+        }
+      } catch (err) {
+        recordException(err as Error, workerSpan);
+        structuredLogger.error("Notification worker error", { error: err });
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } finally {
+        workerSpan.end();
+      }
+    }
+  })();
+
+  // Quality monitoring worker
+  (async function qualityMonitoringWorker() {
+    structuredLogger.info("Quality monitoring worker started");
+
+    while (true) {
+      const workerSpan = createSpan("quality_monitoring_process");
+      try {
+        const job = await redisQ.brpop("quality:queue", 5);
+        if (!job) continue;
+
+        const [, raw] = job;
+        try {
+          const data = JSON.parse(raw);
+          const { callId, metrics, thresholds } = data;
+
+          // Analyze call quality
+          const qualityAnalysis = await analyzeCallQuality(callId, metrics, thresholds);
+
+          // Store quality analysis
+          await redis.hset(`quality:${callId}`, {
+            analysis: JSON.stringify(qualityAnalysis),
+            analyzedAt: new Date().toISOString(),
+          });
+
+          // Trigger alerts if quality is poor
+          if (qualityAnalysis.alerts && qualityAnalysis.alerts.length > 0) {
+            await redisQ.lpush("notifications:queue", JSON.stringify({
+              type: "email",
+              recipient: "quality@invorto.ai",
+              template: "quality_alert",
+              data: { callId, alerts: qualityAnalysis.alerts }
+            }));
+          }
+
+          customMetrics.incrementCounter("quality_analyses_completed");
+          structuredLogger.info("Quality analysis completed", { callId, score: qualityAnalysis.overallScore });
+
+        } catch (err) {
+          recordException(err as Error, workerSpan);
+          const errorData = data as { callId?: string };
+          structuredLogger.error("Quality monitoring error", { error: err, callId: errorData?.callId });
+        }
+      } catch (err) {
+        recordException(err as Error, workerSpan);
+        structuredLogger.error("Quality monitoring worker error", { error: err });
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } finally {
+        workerSpan.end();
+      }
+    }
+  })();
+
   // Health check endpoint (for container health checks)
   process.on("SIGUSR1", async () => {
     const health = await healthChecker.check();
@@ -391,7 +567,7 @@ async function processCostCalculation(callId: string, payload: any) {
   try {
     // Calculate total costs
     const costs = payload;
-    const totalCost = Object.values(costs).reduce((sum: number, cost: any) => {
+    const totalCost = Object.values(costs).reduce((sum: number, cost: unknown) => {
       return sum + (typeof cost === 'number' ? cost : 0);
     }, 0);
     
@@ -459,6 +635,238 @@ async function calculateCallCosts(callId: string, usage: any) {
   }
 }
 
+// Helper functions for new workers
+async function aggregateTenantMetrics(tenantId: string, timeRange: string, metrics: any) {
+  const span = createSpan("aggregate_tenant_metrics");
+  try {
+    // Aggregate metrics from Redis
+    const keys = await redis.keys(`metrics:${tenantId}:*`);
+    const aggregated = {
+      tenantId,
+      timeRange,
+      totalCalls: 0,
+      totalCost: 0,
+      averageQuality: 0,
+      processedAt: new Date().toISOString(),
+    };
+
+    for (const key of keys) {
+      const data = await redis.hgetall(key);
+      if (data.data) {
+        const metricsData = JSON.parse(data.data);
+        aggregated.totalCalls += metricsData.totalCalls || 0;
+        aggregated.totalCost += metricsData.totalCost || 0;
+        aggregated.averageQuality += metricsData.averageQuality || 0;
+      }
+    }
+
+    if (keys.length > 0) {
+      aggregated.averageQuality /= keys.length;
+    }
+
+    return aggregated;
+  } catch (err) {
+    recordException(err as Error, span);
+    throw err;
+  } finally {
+    span.end();
+  }
+}
+
+async function processGDPRDeletion(tenantId: string, data: any) {
+  const span = createSpan("process_gdpr_deletion");
+  try {
+    const { userId, dataTypes } = data;
+
+    // Delete user data from all relevant tables/collections
+    for (const dataType of dataTypes) {
+      if (dataType === "calls") {
+        // Delete call records
+        await redis.del(`calls:${tenantId}:${userId}`);
+      } else if (dataType === "transcriptions") {
+        // Delete transcription data
+        await redis.del(`transcriptions:${tenantId}:${userId}`);
+      }
+      // Add more data types as needed
+    }
+
+    structuredLogger.info("GDPR deletion completed", { tenantId, userId, dataTypes });
+  } catch (err) {
+    recordException(err as Error, span);
+    throw err;
+  } finally {
+    span.end();
+  }
+}
+
+async function processDataRetention(tenantId: string, data: any) {
+  const span = createSpan("process_data_retention");
+  try {
+    const { retentionDays, dataTypes } = data;
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+
+    // Delete old data based on retention policy
+    for (const dataType of dataTypes) {
+      const keys = await redis.keys(`${dataType}:${tenantId}:*`);
+      for (const key of keys) {
+        const data = await redis.hgetall(key);
+        if (data.createdAt && new Date(data.createdAt) < cutoffDate) {
+          await redis.del(key);
+        }
+      }
+    }
+
+    structuredLogger.info("Data retention cleanup completed", { tenantId, retentionDays });
+  } catch (err) {
+    recordException(err as Error, span);
+    throw err;
+  } finally {
+    span.end();
+  }
+}
+
+async function processAuditLogging(tenantId: string, data: any) {
+  const span = createSpan("process_audit_logging");
+  try {
+    const { action, userId, resource, details } = data;
+
+    // Store audit log entry
+    await redis.hset(`audit:${tenantId}:${Date.now()}`, {
+      action,
+      userId,
+      resource,
+      details: JSON.stringify(details),
+      timestamp: new Date().toISOString(),
+    });
+
+    structuredLogger.info("Audit log entry created", { tenantId, action, userId });
+  } catch (err) {
+    recordException(err as Error, span);
+    throw err;
+  } finally {
+    span.end();
+  }
+}
+
+async function sendEmailNotification(recipient: string, template: string, data: any) {
+  const span = createSpan("send_email_notification");
+  try {
+    // This would integrate with an email service like SendGrid, SES, etc.
+    // For now, just log the notification
+    structuredLogger.info("Email notification sent", { recipient, template, data });
+
+    // Mock implementation - replace with actual email service
+    console.log(`Sending email to ${recipient} with template ${template}`, data);
+  } catch (err) {
+    recordException(err as Error, span);
+    throw err;
+  } finally {
+    span.end();
+  }
+}
+
+async function sendSMSNotification(recipient: string, template: string, data: any) {
+  const span = createSpan("send_sms_notification");
+  try {
+    // This would integrate with an SMS service like Twilio, AWS SNS, etc.
+    structuredLogger.info("SMS notification sent", { recipient, template, data });
+
+    // Mock implementation - replace with actual SMS service
+    console.log(`Sending SMS to ${recipient} with template ${template}`, data);
+  } catch (err) {
+    recordException(err as Error, span);
+    throw err;
+  } finally {
+    span.end();
+  }
+}
+
+async function sendPushNotification(recipient: string, template: string, data: any) {
+  const span = createSpan("send_push_notification");
+  try {
+    // This would integrate with push notification services
+    structuredLogger.info("Push notification sent", { recipient, template, data });
+
+    // Mock implementation - replace with actual push service
+    console.log(`Sending push notification to ${recipient} with template ${template}`, data);
+  } catch (err) {
+    recordException(err as Error, span);
+    throw err;
+  } finally {
+    span.end();
+  }
+}
+
+async function analyzeCallQuality(callId: string, metrics: any, thresholds: any) {
+  const span = createSpan("analyze_call_quality");
+  try {
+    const analysis = {
+      callId,
+      overallScore: 0,
+      components: {
+        audioQuality: 0,
+        connectionStability: 0,
+        responseTime: 0,
+        errorRate: 0,
+      },
+      alerts: [] as string[],
+      recommendations: [] as string[],
+    };
+
+    // Analyze audio quality
+    if (metrics.audioPacketsLost > thresholds.audioPacketsLost) {
+      analysis.components.audioQuality = 0.6;
+      analysis.alerts.push("High audio packet loss detected");
+      analysis.recommendations.push("Check network connectivity");
+    } else {
+      analysis.components.audioQuality = 0.9;
+    }
+
+    // Analyze connection stability
+    if (metrics.jitter > thresholds.jitter) {
+      analysis.components.connectionStability = 0.7;
+      analysis.alerts.push("High jitter detected");
+      analysis.recommendations.push("Optimize network conditions");
+    } else {
+      analysis.components.connectionStability = 0.95;
+    }
+
+    // Analyze response time
+    if (metrics.averageResponseTime > thresholds.averageResponseTime) {
+      analysis.components.responseTime = 0.8;
+      analysis.alerts.push("Slow response times detected");
+      analysis.recommendations.push("Consider scaling resources");
+    } else {
+      analysis.components.responseTime = 0.9;
+    }
+
+    // Analyze error rate
+    if (metrics.errorRate > thresholds.errorRate) {
+      analysis.components.errorRate = 0.5;
+      analysis.alerts.push("High error rate detected");
+      analysis.recommendations.push("Investigate error sources");
+    } else {
+      analysis.components.errorRate = 0.95;
+    }
+
+    // Calculate overall score
+    analysis.overallScore = (
+      analysis.components.audioQuality * 0.3 +
+      analysis.components.connectionStability * 0.3 +
+      analysis.components.responseTime * 0.2 +
+      analysis.components.errorRate * 0.2
+    );
+
+    return analysis;
+  } catch (err) {
+    recordException(err as Error, span);
+    throw err;
+  } finally {
+    span.end();
+  }
+}
+
 // Graceful shutdown
 process.on("SIGTERM", async () => {
   structuredLogger.info("SIGTERM received, shutting down gracefully");
@@ -468,7 +876,7 @@ process.on("SIGTERM", async () => {
 });
 
 main().catch((err) => {
-  structuredLogger.error("Worker service failed to start", { error: err });
+  structuredLogger.error("Worker service failed to start", err);
   process.exit(1);
 });
 

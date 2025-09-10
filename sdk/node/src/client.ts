@@ -1,9 +1,9 @@
-import { 
-  InvortoClientInterface, 
-  AgentConfig, 
-  Agent, 
-  CallOptions, 
-  Call, 
+import {
+  InvortoClientInterface,
+  AgentConfig,
+  Agent,
+  CallOptions,
+  Call,
   CallResponse,
   ListOptions,
   CallListOptions,
@@ -20,6 +20,7 @@ import {
   CallAnalytics,
   RealtimeEvent
 } from "./types";
+import { RealtimeWebSocketClient } from "./realtime-client";
 
 export class InvortoClient implements InvortoClientInterface {
   private apiKey: string;
@@ -148,32 +149,9 @@ export class InvortoClient implements InvortoClientInterface {
   
   // Real-time Communication
   async connectToCall(callId: string, options: RealtimeOptions = {}): Promise<RealtimeConnection> {
-    const wsUrl = this.baseUrl.replace('https://', 'wss://').replace('http://', 'ws://');
-    const connectionUrl = `${wsUrl}/v1/realtime/${callId}`;
-    
-    // For now, return a mock connection - in a real implementation, this would establish WebSocket connection
-    const connection: RealtimeConnection = {
-      callId,
-      connectionId: `conn_${Date.now()}`,
-      sendAudio: async (audioData: Buffer) => {
-        // Implementation would send audio over WebSocket
-        console.log(`Sending ${audioData.length} bytes of audio data`);
-      },
-      onAudio: (callback: (audioData: Buffer) => void) => {
-        // Implementation would set up audio event listener
-        console.log('Audio callback registered');
-      },
-      onEvent: (callback: (event: RealtimeEvent) => void) => {
-        // Implementation would set up event listener
-        console.log('Event callback registered');
-      },
-      disconnect: async () => {
-        // Implementation would close WebSocket connection
-        console.log('Disconnecting from realtime session');
-      }
-    };
-    
-    return connection;
+    const client = new RealtimeWebSocketClient(callId, this.baseUrl, this.apiKey, options);
+    await client.connect();
+    return client;
   }
   
   // Webhooks (placeholder - would need webhook management API)

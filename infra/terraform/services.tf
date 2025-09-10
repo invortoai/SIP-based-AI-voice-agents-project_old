@@ -418,6 +418,47 @@ resource "aws_security_group" "alb" {
   }
 }
 
+# Security Group for Monitoring Services
+resource "aws_security_group" "monitoring" {
+  name_prefix = "${var.project_name}-monitoring-"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress {
+    from_port       = 9090
+    to_port         = 9090
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ecs_tasks.id]
+  }
+
+  ingress {
+    from_port       = 9187
+    to_port         = 9187
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ecs_tasks.id]
+  }
+
+  ingress {
+    from_port       = 9121
+    to_port         = 9121
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ecs_tasks.id]
+  }
+
+  ingress {
+    from_port       = 9100
+    to_port         = 9100
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ecs_tasks.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
 # ECS Services with ALB
 resource "aws_ecs_service" "services_with_alb" {
   for_each = { for k, v in local.services : k => v if v.port > 0 }

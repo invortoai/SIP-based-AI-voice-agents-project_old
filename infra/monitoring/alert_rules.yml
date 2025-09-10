@@ -1,0 +1,134 @@
+groups:
+  - name: invorto_alerts
+    rules:
+      # Service down alerts
+      - alert: InvortoAPIServiceDown
+        expr: up{job="invorto-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Invorto API service is down"
+          description: "Invorto API service has been down for more than 1 minute."
+
+      - alert: InvortoRealtimeServiceDown
+        expr: up{job="invorto-realtime"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Invorto Realtime service is down"
+          description: "Invorto Realtime service has been down for more than 1 minute."
+
+      - alert: InvortoTelephonyServiceDown
+        expr: up{job="invorto-telephony"} == 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Invorto Telephony service is down"
+          description: "Invorto Telephony service has been down for more than 1 minute."
+
+      # High error rates
+      - alert: HighAPIErrorRate
+        expr: rate(http_requests_total{status=~"[5]", job="invorto-api"}[5m]) / rate(http_requests_total{job="invorto-api"}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API error rate detected"
+          description: "API error rate is {{ $value | printf \"%.2f\" }}% over the last 5 minutes."
+
+      - alert: HighCallFailureRate
+        expr: rate(calls_failed_total[5m]) / rate(calls_created_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High call failure rate detected"
+          description: "Call failure rate is {{ $value | printf \"%.2f\" }}% over the last 5 minutes."
+
+      # Performance alerts
+      - alert: HighAPIResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="invorto-api"}[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API response time"
+          description: "95th percentile API response time is {{ $value | printf \"%.2f\" }}s over the last 5 minutes."
+
+      - alert: HighWebSocketErrorRate
+        expr: rate(realtime_ws_errors_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High WebSocket error rate"
+          description: "WebSocket error rate is {{ $value }} errors per minute."
+
+      # Resource alerts
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is {{ $value | printf \"%.1f\" }}% on {{ $labels.instance }}."
+
+      - alert: HighMemoryUsage
+        expr: 100 - ((node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100) > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is {{ $value | printf \"%.1f\" }}% on {{ $labels.instance }}."
+
+      - alert: RedisMemoryHigh
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis memory usage high"
+          description: "Redis memory usage is {{ $value | printf \"%.1f\" }}%."
+
+      # Call quality alerts
+      - alert: CallQualityDegraded
+        expr: rate(call_quality_alerts_total[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Call quality degraded"
+          description: "Call quality alerts rate is {{ $value }} per minute."
+
+      - alert: LowMOSScore
+        expr: avg(call_mos_score) < 3.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low MOS score detected"
+          description: "Average MOS score is {{ $value | printf \"%.1f\" }}, indicating poor call quality."
+
+      # Queue alerts
+      - alert: WebhookQueueBacklog
+        expr: webhook_queue_length > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Webhook queue backlog"
+          description: "Webhook queue length is {{ $value }}, indicating processing delays."
+
+      - alert: WorkerQueueBacklog
+        expr: worker_queue_length > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Worker queue backlog"
+          description: "Worker queue length is {{ $value }}, indicating processing delays."

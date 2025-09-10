@@ -2,7 +2,7 @@ import Fastify, { FastifyInstance } from "fastify";
 import client from "prom-client";
 import websocket from "@fastify/websocket";
 import fastifyJwt from "@fastify/jwt";
-import type { WebSocket, RawData } from "ws";
+import { WebSocket, RawData } from "ws";
 import { AgentRuntime } from "./runtime/agent";
 import { TimelinePublisher } from "./timeline/redis";
 import Redis from "ioredis";
@@ -41,16 +41,113 @@ app.get("/metrics", async (req, reply) => {
   return await registry.metrics();
 });
 
+// Helper functions for connection management
+function checkConnectionLimit(callId: string): boolean {
+  const connectionsForCall = Array.from(activeConnections.values())
+    .filter(conn => conn.socket.readyState === WebSocket.OPEN)
+    .length;
+
+  return connectionsForCall < MAX_CONNECTIONS_PER_CALL;
+}
+
+function checkRateLimit(callId: string): boolean {
+  const now = Date.now();
+  const clientKey = callId;
+  const clientData = messageCounts.get(clientKey);
+
+  if (!clientData) {
+    messageCounts.set(clientKey, { count: 1, resetTime: now + 60000 }); // 1 minute
+    return true;
+  }
+
+  if (now > clientData.resetTime) {
+    messageCounts.set(clientKey, { count: 1, resetTime: now + 60000 });
+    return true;
+  }
+
+  if (clientData.count >= MESSAGE_RATE_LIMIT) {
+    return false;
+  }
+
+  clientData.count++;
+  return true;
+}
+
+function validateMessage(msg: any): { valid: boolean; error?: string } {
+  if (!msg || typeof msg !== 'object') {
+    return { valid: false, error: 'Invalid message format' };
+  }
+
+  if (!msg.t || typeof msg.t !== 'string') {
+    return { valid: false, error: 'Missing or invalid message type' };
+  }
+
+  // Validate specific message types
+  switch (msg.t) {
+    case 'start':
+      if (!msg.agentId || typeof msg.agentId !== 'string') {
+        return { valid: false, error: 'Invalid agentId for start message' };
+      }
+      break;
+    case 'dtmf.send':
+      if (!msg.digits || typeof msg.digits !== 'string') {
+        return { valid: false, error: 'Invalid digits for DTMF message' };
+      }
+      break;
+    case 'transfer':
+      if (!msg.to || typeof msg.to !== 'string') {
+        return { valid: false, error: 'Invalid destination for transfer message' };
+      }
+      break;
+    case 'config':
+      if (!msg.config || typeof msg.config !== 'object') {
+        return { valid: false, error: 'Invalid config for config message' };
+      }
+      break;
+  }
+
+  return { valid: true };
+}
+
+function cleanupInactiveConnections(): void {
+  const now = Date.now();
+  for (const [callId, connection] of activeConnections.entries()) {
+    if (now - connection.lastActivity > CONNECTION_TIMEOUT) {
+      try {
+        connection.socket.close(4000, 'Connection timeout');
+      } catch (error) {
+        app.log.warn({ callId, error }, 'Error closing timed out connection');
+      }
+      activeConnections.delete(callId);
+    }
+  }
+}
+
+// Periodic cleanup of inactive connections
+setInterval(cleanupInactiveConnections, 30000); // Every 30 seconds
+
 const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
 const timeline = new TimelinePublisher(redisUrl);
 const webhookQ = new Redis(redisUrl);
 
+// Connection tracking for monitoring and limits
+const activeConnections = new Map<string, { socket: WebSocket; connectedAt: number; lastActivity: number }>();
+const MAX_CONNECTIONS_PER_CALL = parseInt(process.env.MAX_CONNECTIONS_PER_CALL || "5");
+const CONNECTION_TIMEOUT = parseInt(process.env.CONNECTION_TIMEOUT || "300000"); // 5 minutes
+const MESSAGE_RATE_LIMIT = parseInt(process.env.MESSAGE_RATE_LIMIT || "100"); // messages per minute
+const messageCounts = new Map<string, { count: number; resetTime: number }>();
+
 app.get("/v1/realtime/:callId", { websocket: true }, (socket: WebSocket, req) => {
   const { callId } = (req.params as any) as { callId: string };
-  // accept connection
-  
+
+  // Check connection limits
+  if (!checkConnectionLimit(callId)) {
+    socket.close(4001, "connection_limit_exceeded");
+    return;
+  }
+
   // optional IP allowlist could be added here if needed
-  
+
   // Simple auth: expect API key or JWT in Sec-WebSocket-Protocol header (subprotocols)
   const authHeader = (req.headers["sec-websocket-protocol"] || "").toString();
   const bearer = (req.headers["authorization"] || "").toString();
@@ -70,6 +167,13 @@ app.get("/v1/realtime/:callId", { websocket: true }, (socket: WebSocket, req) =>
     }
   }
   
+  // Track connection
+  activeConnections.set(callId, {
+    socket,
+    connectedAt: Date.now(),
+    lastActivity: Date.now()
+  });
+
   app.log.info({ callId }, "ws connected");
   try { wsCounters.inc({ event: "connect" }); } catch {}
 
@@ -163,9 +267,28 @@ app.get("/v1/realtime/:callId", { websocket: true }, (socket: WebSocket, req) =>
   // sendAndMirror defined above
 
   socket.on("message", (raw: RawData) => {
+    // Update last activity
+    const connection = activeConnections.get(callId);
+    if (connection) {
+      connection.lastActivity = Date.now();
+    }
+
     try {
       if (typeof raw === "string") {
+        // Check rate limit
+        if (!checkRateLimit(callId)) {
+          socket.send(JSON.stringify({ t: "error", message: "Rate limit exceeded" }));
+          return;
+        }
+
         const msg = JSON.parse(raw) as WsInbound;
+
+        // Validate message
+        const validation = validateMessage(msg);
+        if (!validation.valid) {
+          socket.send(JSON.stringify({ t: "error", message: validation.error }));
+          return;
+        }
         if (msg.t === "start") {
           const ack: WsOutbound = { t: "stt.partial", text: "connected", ts: 0 };
           sendAndMirror(ack);
@@ -177,13 +300,13 @@ app.get("/v1/realtime/:callId", { websocket: true }, (socket: WebSocket, req) =>
           const m = msg as any;
           timeline.publish(callId, "transfer", { to: m.to, mode: m.mode }).catch(() => {});
         } else if ((msg as any).t === "pause") {
-          // Pause audio processing
-          energy.pause();
+          // Pause audio processing (stop energy meter)
+          energy.stop();
           if (silenceTimer) clearTimeout(silenceTimer);
           timeline.publish(callId, "call.paused", { at: Date.now() }).catch(() => {});
         } else if ((msg as any).t === "resume") {
-          // Resume audio processing
-          energy.resume();
+          // Resume audio processing (restart energy meter)
+          energy.start();
           resetSilenceTimer();
           timeline.publish(callId, "call.resumed", { at: Date.now() }).catch(() => {});
         } else if ((msg as any).t === "config") {
@@ -201,11 +324,15 @@ app.get("/v1/realtime/:callId", { websocket: true }, (socket: WebSocket, req) =>
           originalSend(pong);
         }
       } else if (raw instanceof Buffer) {
-        jb.push(new Uint8Array(raw));
+        // Generate sequence number and timestamp for jitter buffer
+        const seqNum = Math.floor(Date.now() / 20) % 65536; // 16-bit sequence number
+        const ts = Date.now();
+        jb.push(seqNum, ts, new Uint8Array(raw));
+
         const next = jb.pop();
         if (next) {
           energy.pushPcm16(next);
-          runtime.pushAudio(next).catch(() => {});
+          runtime.pushAudio(next, seqNum, ts).catch(() => {});
         }
         resetSilenceTimer();
       }
@@ -221,6 +348,10 @@ app.get("/v1/realtime/:callId", { websocket: true }, (socket: WebSocket, req) =>
 
   socket.on("close", () => {
     energy.stop();
+
+    // Clean up connection tracking
+    activeConnections.delete(callId);
+
     app.log.info({ callId }, "ws closed");
     timeline.publish(callId, "call.ended", { at: Date.now(), reason: "ws_close" }).catch(() => {});
     try { wsCounters.inc({ event: "close" }); } catch {}

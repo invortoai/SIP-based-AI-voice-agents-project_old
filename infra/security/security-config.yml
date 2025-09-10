@@ -1,0 +1,241 @@
+# Security Configuration for Invorto Voice AI Platform
+
+# Network Security
+network:
+  # IP allowlists for different services
+  api_allowlist:
+    - "10.0.0.0/8"      # Internal network
+    - "172.16.0.0/12"   # Docker networks
+    - "192.168.0.0/16"  # Private networks
+
+  realtime_allowlist:
+    - "10.0.0.0/8"
+    - "172.16.0.0/12"
+    - "192.168.0.0/16"
+
+  telephony_allowlist:
+    - "0.0.0.0/0"       # Jambonz webhooks (use API key auth)
+
+  # Rate limiting
+  rate_limits:
+    api:
+      requests_per_minute: 1000
+      burst_limit: 100
+    realtime:
+      connections_per_minute: 50
+      messages_per_second: 10
+    telephony:
+      webhooks_per_minute: 100
+
+# Authentication & Authorization
+auth:
+  # JWT configuration
+  jwt:
+    algorithm: "RS256"
+    issuer: "invorto-platform"
+    audience: "invorto-api"
+    expiration_hours: 24
+
+  # API key configuration
+  api_keys:
+    rotation_period_days: 90
+    key_length: 32
+    hash_algorithm: "sha256"
+
+  # Multi-factor authentication
+  mfa:
+    enabled: true
+    methods: ["totp", "sms"]
+    grace_period_minutes: 5
+
+# Data Protection
+data_protection:
+  # Encryption
+  encryption:
+    algorithm: "aes-256-gcm"
+    key_rotation_days: 30
+    master_key_provider: "aws-kms"
+
+  # PII redaction
+  pii_redaction:
+    enabled: true
+    patterns:
+      - "email"
+      - "phone"
+      - "ssn"
+      - "credit_card"
+    custom_patterns:
+      - name: "indian_phone"
+        regex: "\\+91[6-9]\\d{9}"
+      - name: "indian_aadhaar"
+        regex: "\\d{4}\\s\\d{4}\\s\\d{4}"
+
+  # Data retention
+  retention:
+    call_recordings_days: 90
+    call_logs_days: 365
+    analytics_data_days: 730
+    audit_logs_days: 2555  # 7 years
+
+# Infrastructure Security
+infrastructure:
+  # Container security
+  containers:
+    security_context:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+    image_scanning:
+      enabled: true
+      severity_threshold: "medium"
+
+  # Network policies
+  network_policies:
+    enabled: true
+    default_deny: true
+    allow_dns: true
+    allow_monitoring: true
+
+  # Secrets management
+  secrets:
+    provider: "aws-secrets-manager"
+    rotation_enabled: true
+    rotation_period_days: 30
+
+# Monitoring & Alerting
+monitoring:
+  # Security events
+  security_events:
+    enabled: true
+    log_level: "info"
+    alert_channels: ["email", "slack", "pagerduty"]
+
+  # Audit logging
+  audit:
+    enabled: true
+    log_sensitive_actions: true
+    retention_days: 2555
+
+  # Intrusion detection
+  ids:
+    enabled: true
+    rules:
+      - "sql_injection"
+      - "xss_attempts"
+      - "brute_force"
+      - "suspicious_traffic"
+
+# Compliance
+compliance:
+  # GDPR compliance
+  gdpr:
+    enabled: true
+    data_processing_agreement: true
+    consent_management: true
+    right_to_be_forgotten: true
+
+  # SOC 2 compliance
+  soc2:
+    enabled: true
+    audit_trail: true
+    access_controls: true
+    change_management: true
+
+  # PCI DSS (if handling payments)
+  pci_dss:
+    enabled: false
+    scope: "out_of_scope"
+
+# Incident Response
+incident_response:
+  # Automated responses
+  automated_responses:
+    - trigger: "high_error_rate"
+      action: "scale_up"
+      cooldown_minutes: 10
+    - trigger: "security_breach"
+      action: "isolate_service"
+      cooldown_minutes: 5
+
+  # Escalation procedures
+  escalation:
+    - level: 1
+      threshold: "warning"
+      notify: ["devops@company.com"]
+    - level: 2
+      threshold: "error"
+      notify: ["security@company.com", "devops@company.com"]
+    - level: 3
+      threshold: "critical"
+      notify: ["security@company.com", "devops@company.com", "management@company.com"]
+
+# Backup & Recovery
+backup_recovery:
+  # Backup configuration
+  backups:
+    database:
+      schedule: "0 2 * * *"  # Daily at 2 AM
+      retention_days: 30
+      encryption: true
+    redis:
+      schedule: "0 */4 * * *"  # Every 4 hours
+      retention_days: 7
+      encryption: true
+    s3:
+      schedule: "0 3 * * *"  # Daily at 3 AM
+      retention_days: 365
+      encryption: true
+
+  # Recovery procedures
+  recovery:
+    rto_minutes: 60      # Recovery Time Objective
+    rpo_minutes: 15      # Recovery Point Objective
+    test_frequency: "monthly"
+
+# Performance & Availability
+reliability:
+  # Service Level Objectives
+  slo:
+    api_availability: 0.999  # 99.9% uptime
+    api_latency_p95: 500     # 500ms p95 response time
+    call_success_rate: 0.995 # 99.5% call success rate
+
+  # Circuit breakers
+  circuit_breakers:
+    enabled: true
+    failure_threshold: 0.5
+    recovery_timeout_seconds: 60
+    monitoring_window_seconds: 300
+
+  # Load balancing
+  load_balancing:
+    algorithm: "least_connections"
+    health_checks:
+      interval_seconds: 30
+      timeout_seconds: 5
+      unhealthy_threshold: 3
+      healthy_threshold: 2
+
+# Development & Testing
+development:
+  # Security testing
+  security_testing:
+    enabled: true
+    sast_enabled: true
+    dast_enabled: true
+    dependency_scanning: true
+
+  # Code quality
+  code_quality:
+    sonar_qube_enabled: true
+    coverage_threshold: 80
+    security_hotspots_max: 0
+
+  # Environment isolation
+  environments:
+    development:
+      security_level: "relaxed"
+    staging:
+      security_level: "standard"
+    production:
+      security_level: "strict"

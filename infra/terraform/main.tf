@@ -125,8 +125,19 @@ module "secrets" {
 # WAF rules (rate-limit, IP allowlists)
 module "waf" {
   source = "../modules/waf"
-  
-  environment = var.environment
+
+  environment     = var.environment
+  aws_region      = var.aws_region
+  alb_arn         = module.alb.alb_arn
+  rate_limit      = var.waf_rate_limit
+  allowed_countries = var.waf_allowed_countries
+  blocked_countries = var.waf_blocked_countries
+  allowed_ip_addresses = var.waf_allowed_ip_addresses
+  blocked_ip_addresses = var.waf_blocked_ip_addresses
+  blocked_requests_threshold = var.waf_blocked_requests_threshold
+  alarm_sns_topic_arn = module.monitoring.alerts_topic_arn
+  enable_logging = var.waf_enable_logging
+  log_bucket_arn = module.s3.logs_bucket_arn
 }
 
 # CloudWatch alarms and dashboards
@@ -203,5 +214,65 @@ module "cost_management" {
   tags = {
     Service = "cost-management"
     Component = "governance"
+  }
+}
+
+# Service Mesh (Istio)
+module "service_mesh" {
+  source = "../modules/service-mesh"
+
+  cluster_name = module.eks.cluster_name
+  enable_istio = var.enable_service_mesh
+  istio_version = var.istio_version
+  enable_kiali = var.enable_kiali
+  enable_jaeger = var.enable_jaeger
+  enable_prometheus = var.enable_prometheus
+  ssl_certificate_arn = var.ssl_certificate_arn
+  jwt_issuer = var.jwt_issuer
+  jwks_uri = var.jwks_uri
+  jwt_audience = var.jwt_audience
+
+  tags = {
+    Service = "service-mesh"
+    Component = "istio"
+  }
+}
+
+# Monitoring Exporters (PostgreSQL, Redis, Node, Application metrics)
+module "monitoring_exporters" {
+  source = "../modules/monitoring-exporters"
+
+  environment     = var.environment
+  aws_region      = var.aws_region
+  vpc_id         = module.vpc.vpc_id
+  private_subnets = module.vpc.private_subnet_ids
+  ecs_cluster_id = module.ecs_cluster.cluster_id
+  execution_role_arn = aws_iam_role.ecs_execution.arn
+  task_role_arn = aws_iam_role.ecs_task.arn
+  monitoring_security_groups = [aws_security_group.monitoring.id]
+
+  # PostgreSQL
+  enable_postgres_exporter = var.enable_postgres_exporter
+  db_endpoint = aws_db_instance.main.endpoint
+  db_username = var.db_username
+  db_password = random_password.db.result
+  db_name = var.db_name
+
+  # Redis
+  enable_redis_exporter = var.enable_redis_exporter
+  redis_endpoint = module.redis.endpoint
+  redis_password = var.redis_password
+
+  # Node Exporter
+  enable_node_exporter = var.enable_node_exporter
+
+  # Application Metrics
+  enable_app_metrics_exporter = var.enable_app_metrics_exporter
+  app_metrics_image = var.app_metrics_image
+  app_metrics_tag = var.app_metrics_tag
+
+  tags = {
+    Service = "monitoring-exporters"
+    Component = "observability"
   }
 }

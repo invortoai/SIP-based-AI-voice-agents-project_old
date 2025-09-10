@@ -341,6 +341,239 @@ app.get("/call/:id", async (req, reply) => {
   }
 });
 
+// Multi-party call management
+app.post("/multiparty/:id", async (req, reply) => {
+  const { id } = req.params as any;
+  const { action, participants, conferenceId } = (req.body as any) || {};
+
+  if (!["add", "remove", "mute", "unmute", "list"].includes(action)) {
+    return reply.code(400).send({ code: "bad_request", message: "Invalid action" });
+  }
+
+  try {
+    // Publish multi-party event to timeline
+    await redis.xadd(
+      `events:${id}`,
+      "*",
+      "kind",
+      "multiparty." + action,
+      "payload",
+      JSON.stringify({ action, participants, conferenceId, at: Date.now() })
+    );
+
+    // Generate Jambonz multi-party application JSON
+    let multipartyApp;
+    if (action === "add") {
+      multipartyApp = {
+        verb: "conference",
+        name: conferenceId || `multi_${id}`,
+        actionHook: `${process.env.PUBLIC_BASE_URL || "http://telephony:8085"}/status/${id}`,
+        startConferenceOnEnter: true,
+        endConferenceOnExit: false,
+        participantLabel: participants?.[0]?.label || "participant",
+      };
+    } else if (action === "remove") {
+      multipartyApp = {
+        verb: "leave",
+        conferenceName: conferenceId || `multi_${id}`,
+      };
+    }
+
+    req.log.info({ callId: id, action, participants }, "multi-party control");
+    return multipartyApp || { ok: true, action };
+  } catch (err) {
+    req.log.error({ err, callId: id }, "multi-party control failed");
+    return reply.code(500).send({ code: "internal_error" });
+  }
+});
+
+// IVR (Interactive Voice Response) capabilities
+app.post("/ivr/:id", async (req, reply) => {
+  const { id } = req.params as any;
+  const { prompt, options, timeout = 5000, maxDigits = 1 } = (req.body as any) || {};
+
+  if (!prompt) {
+    return reply.code(400).send({ code: "bad_request", message: "prompt required" });
+  }
+
+  try {
+    // Publish IVR event to timeline
+    await redis.xadd(
+      `events:${id}`,
+      "*",
+      "kind",
+      "ivr.started",
+      "payload",
+      JSON.stringify({ prompt, options, timeout, maxDigits, at: Date.now() })
+    );
+
+    // Generate Jambonz IVR application JSON
+    const ivrApp = [
+      {
+        verb: "play",
+        url: prompt, // Could be TTS URL or audio file
+      },
+      {
+        verb: "gather",
+        input: ["dtmf"],
+        timeout: timeout / 1000, // Convert to seconds
+        maxDigits: maxDigits,
+        actionHook: `${process.env.PUBLIC_BASE_URL || "http://telephony:8085"}/ivr/response/${id}`,
+        statusHook: `${process.env.PUBLIC_BASE_URL || "http://telephony:8085"}/status/${id}`,
+      }
+    ];
+
+    req.log.info({ callId: id, prompt, options }, "IVR initiated");
+    return ivrApp;
+  } catch (err) {
+    req.log.error({ err, callId: id }, "IVR failed");
+    return reply.code(500).send({ code: "internal_error" });
+  }
+});
+
+// IVR response handler
+app.post("/ivr/response/:id", async (req) => {
+  const { id } = req.params as any;
+  const { digits, speech, confidence } = (req.body as any) || {};
+
+  try {
+    // Publish IVR response event to timeline
+    await redis.xadd(
+      `events:${id}`,
+      "*",
+      "kind",
+      "ivr.response",
+      "payload",
+      JSON.stringify({ digits, speech, confidence, at: Date.now() })
+    );
+
+    req.log.info({ callId: id, digits, speech }, "IVR response received");
+    return { ok: true, response: { digits, speech, confidence } };
+  } catch (err) {
+    req.log.error({ err, callId: id }, "IVR response failed");
+    return { ok: false, error: (err as Error).message };
+  }
+});
+
+// Real-time call analytics
+app.get("/analytics/:id", async (req, reply) => {
+  const { id } = req.params as any;
+
+  try {
+    // Get call events for analytics
+    const events = await redis.xrange(`events:${id}`, "-", "+", "COUNT", 1000);
+
+    const analytics = {
+      callId: id,
+      totalEvents: events.length,
+      eventBreakdown: {} as Record<string, number>,
+      duration: 0,
+      qualityMetrics: {
+        dtmfEvents: 0,
+        transferEvents: 0,
+        holdEvents: 0,
+        conferenceEvents: 0,
+        errorEvents: 0,
+      },
+      timeline: [] as Array<{ timestamp: number; event: string; details: any }>,
+    };
+
+    if (events.length > 0) {
+      const firstEvent = events[0];
+      const lastEvent = events[events.length - 1];
+
+      // Calculate duration
+      const [, firstFields] = firstEvent;
+      const [, lastFields] = lastEvent;
+
+      const firstTimestamp = parseInt(String(firstFields[firstFields.indexOf('timestamp') + 1] || '0'));
+      const lastTimestamp = parseInt(String(lastFields[lastFields.indexOf('timestamp') + 1] || Date.now()));
+
+      analytics.duration = lastTimestamp - firstTimestamp;
+
+      // Process events for analytics
+      events.forEach(([, fields]) => {
+        const event: Record<string, string> = {};
+        for (let i = 0; i < fields.length; i += 2) {
+          event[String(fields[i])] = String(fields[i + 1]);
+        }
+
+        const kind = event.kind;
+        analytics.eventBreakdown[kind] = (analytics.eventBreakdown[kind] || 0) + 1;
+
+        // Categorize events
+        if (kind.includes('dtmf')) analytics.qualityMetrics.dtmfEvents++;
+        if (kind.includes('transfer')) analytics.qualityMetrics.transferEvents++;
+        if (kind.includes('hold')) analytics.qualityMetrics.holdEvents++;
+        if (kind.includes('conference')) analytics.qualityMetrics.conferenceEvents++;
+        if (kind.includes('error') || kind.includes('failed')) analytics.qualityMetrics.errorEvents++;
+
+        // Add to timeline
+        analytics.timeline.push({
+          timestamp: parseInt(event.timestamp || '0'),
+          event: kind,
+          details: event.payload ? JSON.parse(event.payload) : null,
+        });
+      });
+    }
+
+    return analytics;
+  } catch (err) {
+    req.log.error({ err, callId: id }, "analytics failed");
+    return reply.code(500).send({ code: "internal_error" });
+  }
+});
+
+// Call quality monitoring
+app.post("/quality/:id", async (req, reply) => {
+  const { id } = req.params as any;
+  const { metric, value, threshold } = (req.body as any) || {};
+
+  if (!metric || value === undefined) {
+    return reply.code(400).send({ code: "bad_request", message: "metric and value required" });
+  }
+
+  try {
+    // Publish quality metric event
+    await redis.xadd(
+      `events:${id}`,
+      "*",
+      "kind",
+      "quality.metric",
+      "payload",
+      JSON.stringify({ metric, value, threshold, at: Date.now() })
+    );
+
+    // Check if metric exceeds threshold
+    const alertTriggered = threshold !== undefined && value > threshold;
+
+    if (alertTriggered) {
+      // Publish alert event
+      await redis.xadd(
+        `events:${id}`,
+        "*",
+        "kind",
+        "quality.alert",
+        "payload",
+        JSON.stringify({ metric, value, threshold, at: Date.now() })
+      );
+
+      req.log.warn({ callId: id, metric, value, threshold }, "Quality alert triggered");
+    }
+
+    return {
+      ok: true,
+      metric,
+      value,
+      threshold,
+      alertTriggered,
+    };
+  } catch (err) {
+    req.log.error({ err, callId: id }, "quality monitoring failed");
+    return reply.code(500).send({ code: "internal_error" });
+  }
+});
+
 // Get active calls
 app.get("/calls/active", async (req, reply) => {
   try {

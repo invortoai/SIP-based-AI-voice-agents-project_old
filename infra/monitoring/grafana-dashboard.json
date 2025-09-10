@@ -1,0 +1,286 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Invorto Voice AI Platform - Infrastructure Monitoring",
+    "tags": ["invorto", "voice-ai", "infrastructure"],
+    "timezone": "UTC",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Service Health Overview",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up{job=~\"invorto-.*\"}",
+            "legendFormat": "{{job}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "options": {
+                  "0": {
+                    "text": "DOWN",
+                    "color": "red"
+                  },
+                  "1": {
+                    "text": "UP",
+                    "color": "green"
+                  }
+                },
+                "type": "value"
+              }
+            ]
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": 2,
+        "title": "API Response Time",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=\"invorto-api\"}[5m]))",
+            "legendFormat": "95th percentile",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket{job=\"invorto-api\"}[5m]))",
+            "legendFormat": "50th percentile",
+            "refId": "B"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        }
+      },
+      {
+        "id": 3,
+        "title": "WebSocket Connections",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "realtime_ws_connections_active",
+            "legendFormat": "Active connections",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(realtime_ws_connections_total[5m])",
+            "legendFormat": "Connection rate",
+            "refId": "B"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        }
+      },
+      {
+        "id": 4,
+        "title": "Call Metrics",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(calls_created_total[5m])",
+            "legendFormat": "Calls created",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(calls_completed_total[5m])",
+            "legendFormat": "Calls completed",
+            "refId": "B"
+          },
+          {
+            "expr": "rate(calls_failed_total[5m])",
+            "legendFormat": "Calls failed",
+            "refId": "C"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        }
+      },
+      {
+        "id": 5,
+        "title": "Database Performance",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "pg_stat_activity_count{datname=\"invorto\"}",
+            "legendFormat": "Active connections",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(pg_stat_database_tup_fetched{datname=\"invorto\"}[5m])",
+            "legendFormat": "Rows fetched/sec",
+            "refId": "B"
+          },
+          {
+            "expr": "rate(pg_stat_database_tup_inserted{datname=\"invorto\"}[5m])",
+            "legendFormat": "Rows inserted/sec",
+            "refId": "C"
+          },
+          {
+            "expr": "pg_stat_database_deadlocks{datname=\"invorto\"}",
+            "legendFormat": "Deadlocks",
+            "refId": "D"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 16
+        }
+      },
+      {
+        "id": 6,
+        "title": "Redis Performance",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "redis_connected_clients",
+            "legendFormat": "Connected clients",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(redis_commands_processed_total[5m])",
+            "legendFormat": "Commands/sec",
+            "refId": "B"
+          },
+          {
+            "expr": "redis_memory_used_bytes / redis_memory_max_bytes",
+            "legendFormat": "Memory usage %",
+            "refId": "C"
+          },
+          {
+            "expr": "redis_keyspace_hits_total / (redis_keyspace_hits_total + redis_keyspace_misses_total)",
+            "legendFormat": "Cache hit rate",
+            "refId": "D"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 16
+        }
+      },
+      {
+        "id": 6,
+        "title": "Error Rates",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{status=~\"5..\", job=\"invorto-api\"}[5m]) / rate(http_requests_total{job=\"invorto-api\"}[5m])",
+            "legendFormat": "API 5xx rate",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(realtime_ws_errors_total[5m])",
+            "legendFormat": "WebSocket errors",
+            "refId": "B"
+          },
+          {
+            "expr": "rate(calls_failed_total[5m]) / rate(calls_created_total[5m])",
+            "legendFormat": "Call failure rate",
+            "refId": "C"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 16
+        }
+      },
+      {
+        "id": 7,
+        "title": "Resource Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "100 - (avg by(instance) (irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+            "legendFormat": "CPU usage %",
+            "refId": "A"
+          },
+          {
+            "expr": "100 - ((node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100)",
+            "legendFormat": "Memory usage %",
+            "refId": "B"
+          },
+          {
+            "expr": "rate(node_disk_io_time_seconds_total[5m]) * 100",
+            "legendFormat": "Disk I/O %",
+            "refId": "C"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 24
+        }
+      },
+      {
+        "id": 8,
+        "title": "Call Quality Metrics",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(call_duration_seconds_bucket[5m]))",
+            "legendFormat": "95th percentile call duration",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(call_quality_alerts_total[5m])",
+            "legendFormat": "Quality alerts",
+            "refId": "B"
+          },
+          {
+            "expr": "avg(call_mos_score)",
+            "legendFormat": "MOS Score",
+            "refId": "C"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 24
+        }
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "templating": {
+      "list": []
+    },
+    "annotations": {
+      "list": []
+    },
+    "refresh": "30s",
+    "schemaVersion": 27,
+    "version": 0,
+    "links": []
+  }
+}
