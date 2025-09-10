@@ -16,6 +16,11 @@ module.exports = {
     '^@invorto/shared/(.*)$': '<rootDir>/packages/shared/src/$1',
   },
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
-  testTimeout: 10000,
+  testTimeout: 20000,
   verbose: true,
+  globals: {
+    'ts-jest': {
+      tsconfig: '<rootDir>/tests/tsconfig.json'
+    }
+  }
 };

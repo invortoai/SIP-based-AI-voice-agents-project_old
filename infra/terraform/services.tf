@@ -212,6 +212,19 @@ resource "aws_secretsmanager_secret" "webhook_secret" {
   name = "${var.project_name}-webhook-secret-${var.environment}"
 }
 
+# Jambonz integration secrets
+resource "aws_secretsmanager_secret" "jambonz_webhook_secret" {
+  name = "${var.project_name}-jambonz-webhook-secret-${var.environment}"
+}
+
+resource "aws_secretsmanager_secret" "jambonz_account_sid" {
+  name = "${var.project_name}-jambonz-account-sid-${var.environment}"
+}
+
+resource "aws_secretsmanager_secret" "jambonz_application_sid" {
+  name = "${var.project_name}-jambonz-application-sid-${var.environment}"
+}
+
 # RDS Database
 resource "random_password" "db" {
   length  = 32
@@ -321,6 +334,27 @@ resource "aws_ecs_task_definition" "services" {
         {
           name  = "S3_BUCKET_METRICS"
           value = module.s3.metrics_bucket_name
+        },
+        # Public URLs (single domain)
+        {
+          name  = "PUBLIC_BASE_URL"
+          value = "https://api.${var.domain_name}"
+        },
+        {
+          name  = "API_BASE_URL"
+          value = "https://api.${var.domain_name}/v1"
+        },
+        {
+          name  = "REALTIME_WS_URL"
+          value = "wss://api.${var.domain_name}/realtime/voice"
+        },
+        {
+          name  = "WEBHOOK_BASE_URL"
+          value = "https://api.${var.domain_name}/webhooks"
+        },
+        {
+          name  = "TELEPHONY_WEBHOOK_BASE_URL"
+          value = "https://api.${var.domain_name}/telephony"
         }
       ]
 
@@ -340,6 +374,18 @@ resource "aws_ecs_task_definition" "services" {
         {
           name      = "WEBHOOK_SECRET"
           valueFrom = aws_secretsmanager_secret.webhook_secret.arn
+        },
+        {
+          name      = "JAMBONZ_WEBHOOK_SECRET"
+          valueFrom = aws_secretsmanager_secret.jambonz_webhook_secret.arn
+        },
+        {
+          name      = "JAMBONZ_ACCOUNT_SID"
+          valueFrom = aws_secretsmanager_secret.jambonz_account_sid.arn
+        },
+        {
+          name      = "JAMBONZ_APPLICATION_SID"
+          valueFrom = aws_secretsmanager_secret.jambonz_application_sid.arn
         }
       ]
 
@@ -566,7 +612,7 @@ resource "aws_lb_listener_rule" "realtime" {
 
   condition {
     path_pattern {
-      values = ["/v1/realtime/*", "/ws/*"]
+      values = ["/realtime/*", "/v1/realtime/*"]
     }
   }
 }
@@ -668,5 +714,55 @@ resource "aws_acm_certificate" "main" {
 }
 
 resource "aws_acm_certificate_validation" "main" {
-  certificate_arn = aws_acm_certificate.main.arn
+  certificate_arn          = aws_acm_certificate.main.arn
+  validation_record_fqdns  = [for r in aws_route53_record.cert_validation : r.fqdn]
+}
+
+# Route53: look up hosted zone for the root domain
+data "aws_route53_zone" "selected" {
+  name         = var.domain_name
+  private_zone = false
+}
+
+# DNS validation records for ACM (auto-validate certificate)
+resource "aws_route53_record" "cert_validation" {
+  for_each = {
+    for dvo in aws_acm_certificate.main.domain_validation_options :
+    dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  }
+
+  zone_id = data.aws_route53_zone.selected.zone_id
+  name    = each.value.name
+  type    = each.value.type
+  ttl     = 60
+  records = [each.value.record]
+}
+
+# Route53 alias records for api.<domain> -> ALB (A and AAAA)
+resource "aws_route53_record" "api_alias_a" {
+  zone_id = data.aws_route53_zone.selected.zone_id
+  name    = "api.${var.domain_name}"
+  type    = "A"
+
+  alias {
+    name                   = module.alb.dns_name
+    zone_id                = module.alb.zone_id
+    evaluate_target_health = false
+  }
+}
+
+resource "aws_route53_record" "api_alias_aaaa" {
+  zone_id = data.aws_route53_zone.selected.zone_id
+  name    = "api.${var.domain_name}"
+  type    = "AAAA"
+
+  alias {
+    name                   = module.alb.dns_name
+    zone_id                = module.alb.zone_id
+    evaluate_target_health = false
+  }
 }

@@ -3,6 +3,7 @@ import client from "prom-client";
 import websocket from "@fastify/websocket";
 import fastifyJwt from "@fastify/jwt";
 import { WebSocket, RawData } from "ws";
+import crypto from "crypto";
 import { AgentRuntime } from "./runtime/agent";
 import { TimelinePublisher } from "./timeline/redis";
 import Redis from "ioredis";
@@ -15,7 +16,7 @@ import { WsInbound, WsOutbound } from "@invorto/shared";
 
 const PORT = Number(process.env.PORT || 8081);
 
-const app: FastifyInstance = Fastify({ logger: true });
+export const app: FastifyInstance = Fastify({ logger: true });
 await app.register(websocket);
 await app.register(fastifyJwt, {
   secret: {
@@ -41,13 +42,108 @@ app.get("/metrics", async (req, reply) => {
   return await registry.metrics();
 });
 
-// Helper functions for connection management
-function checkConnectionLimit(callId: string): boolean {
-  const connectionsForCall = Array.from(activeConnections.values())
-    .filter(conn => conn.socket.readyState === WebSocket.OPEN)
-    .length;
+type Conn = { socket: WebSocket; connectedAt: number; lastActivity: number };
 
-  return connectionsForCall < MAX_CONNECTIONS_PER_CALL;
+// Connection tracking for monitoring and limits
+const activeConnections = new Map<string, Set<Conn>>();
+const MAX_CONNECTIONS_PER_CALL = parseInt(process.env.MAX_CONNECTIONS_PER_CALL || "5");
+const CONNECTION_TIMEOUT = parseInt(process.env.CONNECTION_TIMEOUT || "300000"); // 5 minutes
+const MESSAGE_RATE_LIMIT = parseInt(process.env.MESSAGE_RATE_LIMIT || "100"); // messages per minute
+const REALTIME_ALLOW_MULTI = (process.env.REALTIME_ALLOW_MULTI || "0") === "1";
+const REALTIME_WS_SECRET = process.env.REALTIME_WS_SECRET || "";
+const REALTIME_WS_TTL = parseInt(process.env.REALTIME_WS_TTL || "60"); // seconds
+const messageCounts = new Map<string, { count: number; resetTime: number }>();
+
+function getAllowedHost(): string | null {
+  try {
+    const allowedBase = process.env.PUBLIC_BASE_URL || "";
+    if (!allowedBase) return null;
+    return new URL(allowedBase).host;
+  } catch {
+    return null;
+  }
+}
+
+function enforceOrigin(req: any, socket: WebSocket): boolean {
+  try {
+    const origin = (req.headers["origin"] || "").toString();
+    const allowedHost = getAllowedHost();
+    if (origin && allowedHost) {
+      const originHost = new URL(origin).host;
+      if (originHost !== allowedHost) {
+        socket.close(4003, "forbidden_origin");
+        return false;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return true;
+}
+
+function getApiKeyFromSubprotocol(req: any): string | null {
+  const raw = (req.headers["sec-websocket-protocol"] || "").toString();
+  if (!raw) return null;
+  // Header may contain comma-separated list
+  const first = raw.split(",")[0]?.trim();
+  return first || null;
+}
+
+function isAuthorized(req: any, callId: string): boolean {
+  // Prefer API key via subprotocol
+  const subKey = getApiKeyFromSubprotocol(req);
+  const url = new URL((req.url || ""), "http://localhost");
+  const query = Object.fromEntries(url.searchParams.entries());
+  const queryKey = (query["api_key"] || "").toString();
+  const bearer = (req.headers["authorization"] || "").toString();
+
+  // HMAC via sig, ts
+  const sig = (query["sig"] || "").toString();
+  const tsStr = (query["ts"] || "").toString();
+
+  // 1) API key
+  if ((subKey && process.env.REALTIME_API_KEY && subKey === process.env.REALTIME_API_KEY) ||
+      (queryKey && process.env.REALTIME_API_KEY && queryKey === process.env.REALTIME_API_KEY)) {
+    return true;
+  }
+
+  // 2) JWT via Authorization: Bearer
+  if (bearer?.toLowerCase().startsWith("bearer ")) {
+  const token = bearer.slice(7).trim();
+  // Accept API key via bearer
+  if (process.env.REALTIME_API_KEY && token === process.env.REALTIME_API_KEY) {
+    return true;
+  }
+  try {
+    app.jwt.verify(token);
+    return true;
+  } catch {
+    // fallthrough
+  }
+}
+
+  // 3) HMAC signature check if configured
+  if (REALTIME_WS_SECRET && sig && tsStr) {
+    const ts = Number(tsStr);
+    if (!Number.isFinite(ts)) return false;
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (Math.abs(nowSec - ts) > REALTIME_WS_TTL) {
+      return false;
+    }
+    const mac = crypto.createHmac("sha256", REALTIME_WS_SECRET).update(`${callId}:${ts}`).digest("hex");
+    if (mac === sig) return true;
+  }
+
+  return false;
+}
+
+function checkConnectionLimit(callId: string): boolean {
+  const set = activeConnections.get(callId);
+  const count = set ? set.size : 0;
+  if (!REALTIME_ALLOW_MULTI) {
+    return count < 1; // single connection enforced
+  }
+  return count < MAX_CONNECTIONS_PER_CALL;
 }
 
 function checkRateLimit(callId: string): boolean {
@@ -82,7 +178,6 @@ function validateMessage(msg: any): { valid: boolean; error?: string } {
     return { valid: false, error: 'Missing or invalid message type' };
   }
 
-  // Validate specific message types
   switch (msg.t) {
     case 'start':
       if (!msg.agentId || typeof msg.agentId !== 'string') {
@@ -111,15 +206,18 @@ function validateMessage(msg: any): { valid: boolean; error?: string } {
 
 function cleanupInactiveConnections(): void {
   const now = Date.now();
-  for (const [callId, connection] of activeConnections.entries()) {
-    if (now - connection.lastActivity > CONNECTION_TIMEOUT) {
-      try {
-        connection.socket.close(4000, 'Connection timeout');
-      } catch (error) {
-        app.log.warn({ callId, error }, 'Error closing timed out connection');
+  for (const [callId, set] of activeConnections.entries()) {
+    for (const conn of set) {
+      if (now - conn.lastActivity > CONNECTION_TIMEOUT) {
+        try {
+          conn.socket.close(4000, 'connection_timeout');
+        } catch (error) {
+          app.log.warn({ callId, error }, 'Error closing timed out connection');
+        }
+        set.delete(conn);
       }
-      activeConnections.delete(callId);
     }
+    if (set.size === 0) activeConnections.delete(callId);
   }
 }
 
@@ -130,49 +228,29 @@ const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
 const timeline = new TimelinePublisher(redisUrl);
 const webhookQ = new Redis(redisUrl);
 
-// Connection tracking for monitoring and limits
-const activeConnections = new Map<string, { socket: WebSocket; connectedAt: number; lastActivity: number }>();
-const MAX_CONNECTIONS_PER_CALL = parseInt(process.env.MAX_CONNECTIONS_PER_CALL || "5");
-const CONNECTION_TIMEOUT = parseInt(process.env.CONNECTION_TIMEOUT || "300000"); // 5 minutes
-const MESSAGE_RATE_LIMIT = parseInt(process.env.MESSAGE_RATE_LIMIT || "100"); // messages per minute
-const messageCounts = new Map<string, { count: number; resetTime: number }>();
+function handleRealtimeWs(socket: WebSocket, req: any, callId: string, agentId?: string) {
+  if (!enforceOrigin(req, socket)) return;
 
-app.get("/v1/realtime/:callId", { websocket: true }, (socket: WebSocket, req) => {
-  const { callId } = (req.params as any) as { callId: string };
+  if (!callId) {
+    socket.close(4002, "missing_call_id");
+    return;
+  }
 
-  // Check connection limits
+  if (!isAuthorized(req, callId)) {
+    socket.close(4003, "unauthorized");
+    return;
+  }
+
   if (!checkConnectionLimit(callId)) {
     socket.close(4001, "connection_limit_exceeded");
     return;
   }
 
-  // optional IP allowlist could be added here if needed
-
-  // Simple auth: expect API key or JWT in Sec-WebSocket-Protocol header (subprotocols)
-  const authHeader = (req.headers["sec-websocket-protocol"] || "").toString();
-  const bearer = (req.headers["authorization"] || "").toString();
-  if (!authHeader && !bearer) {
-    socket.close(4001, "invalid_api_key");
-    return;
-  }
-  
-  // If a Bearer token is present, verify it
-  if (bearer?.toLowerCase().startsWith("bearer ")) {
-    const token = bearer.slice(7).trim();
-    try {
-      app.jwt.verify(token);
-    } catch {
-      socket.close(4001, "invalid_token");
-      return;
-    }
-  }
-  
-  // Track connection
-  activeConnections.set(callId, {
-    socket,
-    connectedAt: Date.now(),
-    lastActivity: Date.now()
-  });
+  // Register connection
+  const conn: Conn = { socket, connectedAt: Date.now(), lastActivity: Date.now() };
+  const set = activeConnections.get(callId) || new Set<Conn>();
+  set.add(conn);
+  activeConnections.set(callId, set);
 
   app.log.info({ callId }, "ws connected");
   try { wsCounters.inc({ event: "connect" }); } catch {}
@@ -213,7 +291,7 @@ app.get("/v1/realtime/:callId", { websocket: true }, (socket: WebSocket, req) =>
     timeline
   );
   runtime.start().catch((err) => app.log.error({ err }, "runtime start error"));
-  timeline.publish(callId, "call.started", { at: Date.now() }).catch(() => {});
+  timeline.publish(callId, "call.started", { at: Date.now(), agentId: agentId || null }).catch(() => {});
   const tenantWebhook = process.env.TENANT_WEBHOOK_URL;
   if (tenantWebhook) {
     (async () => {
@@ -240,13 +318,10 @@ app.get("/v1/realtime/:callId", { websocket: true }, (socket: WebSocket, req) =>
   energy.onWindow((w) => {
     const payload = { energy_db: Number(w.energyDb.toFixed(1)), speaking: w.speaking };
     timeline.publish(callId, "emotion.window", payload).catch(() => {});
-    // Also emit over WS to client
     try {
       const msg: WsOutbound = { ...(payload as any), t: "emotion.window" } as any;
-      // originalSend is wrapped by sendAndMirror; reuse it for consistency
       (sendAndMirror as any)(msg);
     } catch {}
-    // Optional derived emotion.state (very simple energy-based)
     if ((process.env.EMOTION_STATE_ENABLED || "false").toLowerCase() === "true") {
       const cls = w.speaking && w.energyDb > thresholdDb + 10 ? "active" : "idle";
       const state = { t: "emotion.state", class: cls, arousal: Math.max(0, Math.min(1, (w.energyDb + 100) / 60)), valence: 0.5, confidence: 0.6 } as any;
@@ -264,26 +339,15 @@ app.get("/v1/realtime/:callId", { websocket: true }, (socket: WebSocket, req) =>
     }, 3000);
   };
 
-  // sendAndMirror defined above
-
   socket.on("message", (raw: RawData) => {
-    // Update last activity
-    const connection = activeConnections.get(callId);
-    if (connection) {
-      connection.lastActivity = Date.now();
-    }
-
+    conn.lastActivity = Date.now();
     try {
       if (typeof raw === "string") {
-        // Check rate limit
         if (!checkRateLimit(callId)) {
           socket.send(JSON.stringify({ t: "error", message: "Rate limit exceeded" }));
           return;
         }
-
         const msg = JSON.parse(raw) as WsInbound;
-
-        // Validate message
         const validation = validateMessage(msg);
         if (!validation.valid) {
           socket.send(JSON.stringify({ t: "error", message: validation.error }));
@@ -300,17 +364,14 @@ app.get("/v1/realtime/:callId", { websocket: true }, (socket: WebSocket, req) =>
           const m = msg as any;
           timeline.publish(callId, "transfer", { to: m.to, mode: m.mode }).catch(() => {});
         } else if ((msg as any).t === "pause") {
-          // Pause audio processing (stop energy meter)
           energy.stop();
           if (silenceTimer) clearTimeout(silenceTimer);
           timeline.publish(callId, "call.paused", { at: Date.now() }).catch(() => {});
         } else if ((msg as any).t === "resume") {
-          // Resume audio processing (restart energy meter)
           energy.start();
           resetSilenceTimer();
           timeline.publish(callId, "call.resumed", { at: Date.now() }).catch(() => {});
         } else if ((msg as any).t === "config") {
-          // Update runtime configuration
           const config = (msg as any).config;
           if (config) {
             runtime.updateConfig(config).catch((err) => {
@@ -319,13 +380,11 @@ app.get("/v1/realtime/:callId", { websocket: true }, (socket: WebSocket, req) =>
             timeline.publish(callId, "config.updated", { config, at: Date.now() }).catch(() => {});
           }
         } else if ((msg as any).t === "ping") {
-          // Respond to ping with pong
           const pong: WsOutbound = { t: "pong", timestamp: Date.now() } as any;
           originalSend(pong);
         }
       } else if (raw instanceof Buffer) {
-        // Generate sequence number and timestamp for jitter buffer
-        const seqNum = Math.floor(Date.now() / 20) % 65536; // 16-bit sequence number
+        const seqNum = Math.floor(Date.now() / 20) % 65536;
         const ts = Date.now();
         jb.push(seqNum, ts, new Uint8Array(raw));
 
@@ -338,7 +397,6 @@ app.get("/v1/realtime/:callId", { websocket: true }, (socket: WebSocket, req) =>
       }
     } catch (err) {
       app.log.error({ err }, "ws message error");
-      // Send error response to client
       try {
         const errorMsg: WsOutbound = { t: "error", message: "Invalid message format" } as any;
         originalSend(errorMsg);
@@ -348,10 +406,11 @@ app.get("/v1/realtime/:callId", { websocket: true }, (socket: WebSocket, req) =>
 
   socket.on("close", () => {
     energy.stop();
-
-    // Clean up connection tracking
-    activeConnections.delete(callId);
-
+    const set = activeConnections.get(callId);
+    if (set) {
+      set.delete(conn);
+      if (set.size === 0) activeConnections.delete(callId);
+    }
     app.log.info({ callId }, "ws closed");
     timeline.publish(callId, "call.ended", { at: Date.now(), reason: "ws_close" }).catch(() => {});
     try { wsCounters.inc({ event: "close" }); } catch {}
@@ -376,22 +435,40 @@ app.get("/v1/realtime/:callId", { websocket: true }, (socket: WebSocket, req) =>
 
   socket.on("error", (error) => {
     app.log.error({ error, callId }, "WebSocket error");
-    timeline.publish(callId, "call.error", { error: error.message, at: Date.now() }).catch(() => {});
+    timeline.publish(callId, "call.error", { error: (error as any)?.message || "ws_error", at: Date.now() }).catch(() => {});
   });
 
-  // Send connection confirmation
   const connectionMsg: WsOutbound = { t: "connected", callId, timestamp: Date.now() } as any;
   originalSend(connectionMsg);
+}
+
+// WS routes
+app.get("/v1/realtime/:callId", { websocket: true }, (socket: WebSocket, req) => {
+  const { callId } = (req.params as any) as { callId: string };
+  const url = new URL((req.url || ""), "http://localhost");
+  const agentId = url.searchParams.get("agentId") || undefined;
+  handleRealtimeWs(socket, req, callId, agentId || undefined);
+});
+
+// New unified WS entrypoint: /realtime/voice?callId=...&agentId=...
+app.get("/realtime/voice", { websocket: true }, (socket: WebSocket, req) => {
+  const url = new URL((req.url || ""), "http://localhost");
+  const callId = url.searchParams.get("callId") || "";
+  const agentId = url.searchParams.get("agentId") || undefined;
+  handleRealtimeWs(socket, req, callId, agentId || undefined);
 });
 
 // Connection management endpoint
 app.get("/v1/realtime/connections", async () => {
-  // This would typically track active connections
-  // For now, return basic info
+  const summary: Record<string, number> = {};
+  for (const [callId, set] of activeConnections.entries()) {
+    summary[callId] = set.size;
+  }
   return {
     service: "realtime",
     status: "running",
     timestamp: new Date().toISOString(),
+    connections: summary,
   };
 });
 
@@ -518,8 +595,9 @@ process.on("SIGTERM", async () => {
   process.exit(0);
 });
 
-app.listen({ port: PORT, host: "0.0.0.0" }).catch((err) => {
-  app.log.error(err);
-  process.exit(1);
-});
-
+if (!process.env.JEST_WORKER_ID && (process.env.NODE_ENV || "") !== "test") {
+  app.listen({ port: PORT, host: "0.0.0.0" }).catch((err) => {
+    app.log.error(err);
+    process.exit(1);
+  });
+}

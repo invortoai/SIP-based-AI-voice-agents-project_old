@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+/// <reference path="../jest-globals.d.ts" />
+/* Using global Jest via ../jest-globals.d.ts */
 import { JitterBuffer } from '../../services/realtime/src/runtime/jitterBuffer';
 import { EnergyMeter } from '../../services/realtime/src/runtime/energyMeter';
 

@@ -69,7 +69,7 @@ export class RealtimeClient {
   private events: RealtimeEvent[] = [];
   
   constructor(
-    private baseUrl: string = "wss://api.invorto.ai",
+    private baseUrl: string = "wss://api.invortoai.com",
     private options: RealtimeOptions = {}
   ) {
     this.maxReconnectAttempts = options.reconnectAttempts || 3;
@@ -82,8 +82,31 @@ export class RealtimeClient {
       this.agentId = agentId;
       this.apiKey = apiKey;
       
-      const url = `${this.baseUrl}/v1/realtime/${callId}`;
-      this.ws = new WebSocket(url, [apiKey]);
+      const base = this.baseUrl.replace(/\/+$/, "");
+      const qp = new URLSearchParams();
+  
+      // Prefer subprotocol for API key if available; also support query fallback
+      if (apiKey) qp.set("api_key", apiKey);
+  
+      // Optional params
+      if (agentId) qp.set("agentId", agentId);
+      if (this.options.sampleRate) qp.set("rate", String(this.options.sampleRate));
+      if (this.options.channels) qp.set("channels", String(this.options.channels));
+      if (this.options.audioFormat) qp.set("codec", this.options.audioFormat);
+  
+      // Optional HMAC signature parameters (sig + ts) for serverside verification
+      const sig = (this.options as any)?.signature as string | undefined;
+      const ts = (this.options as any)?.ts as string | number | undefined;
+      if (sig && ts) {
+        qp.set("sig", String(sig));
+        qp.set("ts", String(ts));
+      }
+  
+      const qs = qp.toString();
+      const url = `${base}/realtime/voice?callId=${encodeURIComponent(callId)}${qs ? `&${qs}` : ""}`;
+  
+      // Use subprotocol to carry API key when possible
+      this.ws = apiKey ? new WebSocket(url, [apiKey]) : new WebSocket(url);
       
       this.ws.onopen = () => {
         this.isReconnecting = false;
@@ -159,9 +182,13 @@ export class RealtimeClient {
           const pcm = (message as any).pcm16 as Uint8Array | string | number[] | undefined;
           let buffer: ArrayBuffer | null = null;
           if (pcm instanceof Uint8Array) {
-            buffer = pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength);
+            // Ensure we always produce an ArrayBuffer (not SharedArrayBuffer) by copying
+            const copy = new Uint8Array(pcm.byteLength);
+            copy.set(pcm);
+            buffer = copy.buffer;
           } else if (Array.isArray(pcm)) {
-            buffer = new Uint8Array(pcm).buffer;
+            const arr = new Uint8Array(pcm);
+            buffer = arr.buffer;
           } else if (typeof pcm === 'string') {
             buffer = this.base64ToArrayBuffer(pcm);
           }

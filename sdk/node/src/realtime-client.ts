@@ -41,11 +41,12 @@ export class RealtimeWebSocketClient extends EventEmitter implements RealtimeCon
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        const wsUrl = this.baseUrl.replace(/^http/, 'ws') + `/v1/realtime/${this.callId}`;
-        this.ws = new WebSocket(wsUrl, {
+        const wsBase = this.baseUrl.replace(/^http/, 'ws').replace(/\/+$/, '');
+        const wsUrl = `${wsBase}/realtime/voice?callId=${encodeURIComponent(this.callId)}`;
+        const protocols = this.apiKey ? [this.apiKey] : undefined;
+        this.ws = new WebSocket(wsUrl, protocols, {
           headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'Sec-WebSocket-Protocol': this.apiKey
+            'Authorization': `Bearer ${this.apiKey}`
           }
         });
 
@@ -55,9 +56,9 @@ export class RealtimeWebSocketClient extends EventEmitter implements RealtimeCon
           this.isReconnecting = false;
           this.startHeartbeat();
 
-          // Send initial connection message
+          // Send initial connection message (server expects 't' field)
           this.send({
-            type: 'start',
+            t: 'start',
             callId: this.callId,
             options: this.options
           });
@@ -105,7 +106,7 @@ export class RealtimeWebSocketClient extends EventEmitter implements RealtimeCon
   private startHeartbeat(): void {
     this.heartbeatInterval = setInterval(() => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this.send({ type: 'ping', timestamp: Date.now() });
+        this.send({ t: 'ping', timestamp: Date.now() });
       }
     }, 30000); // Send heartbeat every 30 seconds
   }
@@ -147,49 +148,58 @@ export class RealtimeWebSocketClient extends EventEmitter implements RealtimeCon
   private handleMessage(data: Buffer): void {
     try {
       const message = JSON.parse(data.toString());
+      const t = message.t || message.type;
 
-      switch (message.type) {
+      switch (t) {
         case 'pong':
           // Heartbeat response - ignore
           break;
 
-        case 'audio':
-          if (this.audioCallback && message.data) {
-            const audioBuffer = Buffer.from(message.data, 'base64');
-            this.audioCallback(audioBuffer);
-
-            const audioEvent: RealtimeEvent = {
-              type: 'audio',
-              data: audioBuffer,
-              timestamp: new Date().toISOString()
-            };
-            this.emitEvent(audioEvent);
-          }
-          break;
-
-        case 'transcription':
+        case 'stt.partial':
+        case 'stt.final': {
           const transcriptionEvent: RealtimeEvent = {
             type: 'transcription',
             text: message.text,
-            isFinal: message.isFinal,
+            isFinal: t === 'stt.final',
             timestamp: new Date().toISOString()
           };
           this.emitEvent(transcriptionEvent);
           break;
+        }
 
-        case 'tts':
-          if (message.audio) {
-            const ttsAudio = Buffer.from(message.audio, 'base64');
-            const ttsEvent: RealtimeEvent = {
-              type: 'tts',
-              audio: ttsAudio,
-              timestamp: new Date().toISOString()
-            };
-            this.emitEvent(ttsEvent);
+        case 'tts.chunk': {
+          if (message.pcm16) {
+            let audioBuffer: Buffer | null = null;
+            if (typeof message.pcm16 === 'string') {
+              // base64
+              audioBuffer = Buffer.from(message.pcm16, 'base64');
+            } else if (Array.isArray(message.pcm16)) {
+              audioBuffer = Buffer.from(Uint8Array.from(message.pcm16));
+            }
+            if (audioBuffer) {
+              this.audioCallback?.(audioBuffer);
+              const audioEvent: RealtimeEvent = {
+                type: 'audio',
+                data: audioBuffer,
+                timestamp: new Date().toISOString()
+              };
+              this.emitEvent(audioEvent);
+            }
           }
           break;
+        }
 
-        case 'call.ended':
+        case 'connected': {
+          const connectedEvent: RealtimeEvent = {
+            type: 'connected',
+            callId: this.callId,
+            timestamp: new Date().toISOString()
+          };
+          this.emitEvent(connectedEvent);
+          break;
+        }
+
+        case 'call.ended': {
           const endEvent: RealtimeEvent = {
             type: 'call.ended',
             reason: message.reason || 'Unknown',
@@ -197,8 +207,9 @@ export class RealtimeWebSocketClient extends EventEmitter implements RealtimeCon
           };
           this.emitEvent(endEvent);
           break;
+        }
 
-        case 'error':
+        case 'error': {
           const errorEvent: RealtimeEvent = {
             type: 'error',
             message: message.message,
@@ -206,9 +217,10 @@ export class RealtimeWebSocketClient extends EventEmitter implements RealtimeCon
           };
           this.emitEvent(errorEvent);
           break;
+        }
 
         default:
-          // Handle other message types
+          // Forward any other message
           this.emit('message', message);
           break;
       }
@@ -243,18 +255,8 @@ export class RealtimeWebSocketClient extends EventEmitter implements RealtimeCon
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error('WebSocket not connected');
     }
-
-    // Send audio data as base64
-    const audioMessage = {
-      type: 'audio',
-      data: audioData.toString('base64'),
-      format: this.options.audioFormat,
-      sampleRate: this.options.sampleRate,
-      channels: this.options.channels,
-      timestamp: Date.now()
-    };
-
-    this.send(audioMessage);
+    // Server expects raw PCM16 little-endian frames over WS (binary)
+    this.ws.send(audioData);
   }
 
   onAudio(callback: (audioData: Buffer) => void): void {
@@ -292,47 +294,34 @@ export class RealtimeWebSocketClient extends EventEmitter implements RealtimeCon
   // Control methods
   sendDTMF(digits: string): void {
     this.send({
-      type: 'dtmf',
+      t: 'dtmf.send',
       digits,
+      method: 'rfc2833',
       timestamp: Date.now()
     });
   }
 
   mute(): void {
-    this.send({
-      type: 'control',
-      action: 'mute',
-      timestamp: Date.now()
-    });
+    // Map to pause
+    this.send({ t: 'pause', timestamp: Date.now() });
   }
 
   unmute(): void {
-    this.send({
-      type: 'control',
-      action: 'unmute',
-      timestamp: Date.now()
-    });
+    // Map to resume
+    this.send({ t: 'resume', timestamp: Date.now() });
   }
 
   hold(): void {
-    this.send({
-      type: 'control',
-      action: 'hold',
-      timestamp: Date.now()
-    });
+    this.send({ t: 'pause', timestamp: Date.now() });
   }
 
   unhold(): void {
-    this.send({
-      type: 'control',
-      action: 'unhold',
-      timestamp: Date.now()
-    });
+    this.send({ t: 'resume', timestamp: Date.now() });
   }
 
   transfer(to: string, mode: 'blind' | 'attended' = 'blind'): void {
     this.send({
-      type: 'transfer',
+      t: 'transfer',
       to,
       mode,
       timestamp: Date.now()
@@ -340,9 +329,9 @@ export class RealtimeWebSocketClient extends EventEmitter implements RealtimeCon
   }
 
   endCall(): void {
-    this.send({
-      type: 'end',
-      timestamp: Date.now()
-    });
+    // Prefer closing socket; server will emit call.ended on close
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.close(1000, 'Client disconnecting');
+    }
   }
 }

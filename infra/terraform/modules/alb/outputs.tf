@@ -3,12 +3,17 @@ output "dns_name" {
   value       = aws_lb.main.dns_name
 }
 
-output "realtime_tg_arn" {
-  description = "Realtime target group ARN"
-  value       = aws_lb_target_group.realtime.arn
+output "zone_id" {
+  description = "ALB hosted zone id (for Route53 alias)"
+  value       = aws_lb.main.zone_id
 }
 
-output "api_tg_arn" {
-  description = "API target group ARN"
-  value       = aws_lb_target_group.api.arn
+output "alb_arn" {
+  description = "ALB ARN"
+  value       = aws_lb.main.arn
+}
+
+output "security_group_id" {
+  description = "ALB Security Group ID"
+  value       = aws_security_group.alb.id
 }

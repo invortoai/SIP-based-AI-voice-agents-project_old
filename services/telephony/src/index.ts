@@ -1,12 +1,111 @@
 import Fastify from "fastify";
+import fastifyCors from "@fastify/cors";
 import { z } from "zod";
 import Redis from "ioredis";
+import crypto from "node:crypto";
 
-const app = Fastify({ logger: true });
+export const app = Fastify({ logger: true });
 const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
+
+// CORS: explicitly allow PUBLIC_BASE_URL origin if provided (single-domain)
+const allowedOrigin = (() => {
+  const b = process.env.PUBLIC_BASE_URL || "";
+  try {
+    return b ? new URL(b).origin : true;
+  } catch {
+    return true;
+  }
+})();
+
+await app.register(fastifyCors, {
+  origin: allowedOrigin as any,
+  methods: ["GET", "POST", "OPTIONS"],
+  credentials: false,
+});
 
 // Health
 app.get("/health", async () => ({ ok: true }));
+
+// ---- Concurrency limits (Redis-backed semaphores) ----
+const PER_CAMPAIGN_MAX = parseInt(process.env.TELEPHONY_PER_CAMPAIGN_MAX_CONCURRENCY || "0"); // 0 = unlimited
+const GLOBAL_MAX = parseInt(process.env.TELEPHONY_GLOBAL_MAX_CONCURRENCY || "0"); // 0 = unlimited
+const SEM_TTL = parseInt(process.env.TELEPHONY_SEMAPHORE_TTL_SEC || "3600");
+
+const GLOBAL_SET_KEY = "limits:global";
+const CAMPAIGNS_INDEX_KEY = "limits:campaigns";
+const campaignSetKey = (campaignId: string) => `limits:campaign:${campaignId}`;
+const tokenFor = (callId: string) => `sem:${callId}`;
+const callCampaignKey = (callId: string) => `limits:call:${callId}:campaign`;
+
+function getCampaignId(req: any, body: any): string {
+  return (req.headers["x-campaign-id"] as string) || body?.campaign_id || "default";
+}
+function isTerminalStatus(status: string): boolean {
+  const s = (status || "").toLowerCase();
+  return ["completed", "failed", "no-answer", "busy", "canceled", "hangup", "ended", "call.ended", "finished"].includes(s);
+}
+
+async function acquireSemaphores(campaignId: string, callId: string): Promise<{ ok: true } | { ok: false; scope: "global" | "campaign"; limit: number; count: number }> {
+  const token = tokenFor(callId);
+
+  // Global limit
+  if (GLOBAL_MAX > 0) {
+    await redis.sadd(GLOBAL_SET_KEY, token);
+    const cnt = await redis.scard(GLOBAL_SET_KEY);
+    if (cnt > GLOBAL_MAX) {
+      await redis.srem(GLOBAL_SET_KEY, token);
+      return { ok: false, scope: "global", limit: GLOBAL_MAX, count: cnt - 1 };
+    }
+  }
+
+  // Campaign limit
+  if (PER_CAMPAIGN_MAX > 0) {
+    const ck = campaignSetKey(campaignId);
+    await redis.sadd(ck, token);
+    const cntC = await redis.scard(ck);
+    if (cntC > PER_CAMPAIGN_MAX) {
+      await redis.srem(ck, token);
+      if (GLOBAL_MAX > 0) await redis.srem(GLOBAL_SET_KEY, token);
+      return { ok: false, scope: "campaign", limit: PER_CAMPAIGN_MAX, count: cntC - 1 };
+    }
+    await redis.sadd(CAMPAIGNS_INDEX_KEY, campaignId);
+  }
+
+  // Track mapping and TTL guard
+  try { await redis.set(callCampaignKey(callId), campaignId, "EX", SEM_TTL); } catch {}
+  try { await redis.set(`limits:token:${callId}`, "1", "EX", SEM_TTL); } catch {}
+
+  return { ok: true };
+}
+
+async function releaseSemaphoresByCall(callId: string): Promise<void> {
+  const token = tokenFor(callId);
+  try {
+    const campaignId = (await redis.get(callCampaignKey(callId))) || undefined;
+    if (campaignId) {
+      const ck = campaignSetKey(campaignId);
+      await redis.srem(ck, token);
+    }
+    await redis.srem(GLOBAL_SET_KEY, token);
+    await redis.del(callCampaignKey(callId));
+    await redis.del(`limits:token:${callId}`);
+  } catch {}
+}
+
+// Limits metrics endpoint
+app.get("/telephony/limits", async () => {
+  const globalCount = await redis.scard(GLOBAL_SET_KEY);
+  const campaigns = await redis.smembers(CAMPAIGNS_INDEX_KEY);
+  const details: Array<{ campaignId: string; count: number; limit: number }> = [];
+  for (const c of campaigns) {
+    const cnt = await redis.scard(campaignSetKey(c));
+    details.push({ campaignId: c, count: cnt, limit: PER_CAMPAIGN_MAX });
+  }
+  return {
+    global: { count: globalCount, limit: GLOBAL_MAX },
+    campaigns: details,
+  };
+});
 
 // Basic security: optional IP allowlist and shared token
 app.addHook("onRequest", async (req, reply) => {
@@ -43,12 +142,33 @@ const callHookSchema = z.object({
 
 // Connect verb response to bridge media to our realtime WS
 function connectToRealtime(callId: string, agentId?: string) {
-  const wsUrl = process.env.REALTIME_WS_URL || "ws://realtime:8081/v1/realtime";
-  const url = `${wsUrl}/${callId}?agentId=${encodeURIComponent(agentId || "")}&codec=linear16&rate=16000`;
-  const headers: Record<string, string> = {};
-  if (process.env.REALTIME_API_KEY) headers["Sec-WebSocket-Protocol"] = process.env.REALTIME_API_KEY;
+  // Build signed URL for realtime WS: wss://.../v1/realtime/:callId?sig=..&ts=..&agentId=...
+  const base = (process.env.REALTIME_WS_BASE_URL || process.env.REALTIME_WS_URL || "wss://api.invortoai.com").replace(/\/+$/, "");
+  const wsSecret = process.env.REALTIME_WS_SECRET || "";
+  const ts = Math.floor(Date.now() / 1000).toString();
+  let sig = "";
+  try {
+    if (wsSecret) {
+      sig = crypto.createHmac("sha256", wsSecret).update(`${callId}:${ts}`).digest("hex");
+    }
+  } catch {}
 
-  // Jambonz application JSON
+  const qp = new URLSearchParams();
+  if (sig) qp.set("sig", sig);
+  qp.set("ts", ts);
+  if (agentId) qp.set("agentId", agentId);
+  // Audio preferences (optional)
+  qp.set("codec", "linear16");
+  qp.set("rate", "16000");
+
+  // Use v1 route as canonical
+  const url = `${base}/v1/realtime/${encodeURIComponent(callId)}?${qp.toString()}`;
+
+  const headers: Record<string, string> = {};
+  const apiKey = process.env.REALTIME_API_KEY;
+  if (apiKey) headers["Sec-WebSocket-Protocol"] = apiKey;
+
+  // Jambonz application JSON (connect verb)
   return [
     {
       verb: "redirect",
@@ -56,7 +176,6 @@ function connectToRealtime(callId: string, agentId?: string) {
     },
     {
       verb: "connect",
-      // Support both possible schema keys for compatibility
       url,
       wsUrl: url,
       headers,
@@ -66,19 +185,31 @@ function connectToRealtime(callId: string, agentId?: string) {
   ];
 }
 
-// Incoming call webhook
+// Incoming call webhook (generic)
 app.post("/call", async (req, reply) => {
   const body = callHookSchema.safeParse((req as any).body);
   if (!body.success) {
     return reply.code(400).send({ error: "bad_request" });
   }
-  const callId = body.data.call_sid || `c_${Math.random().toString(36).slice(2)}`;
+  const raw = body.data;
+  const callId = raw.call_sid || `c_${Math.random().toString(36).slice(2)}`;
+  const campaignId = getCampaignId(req, raw);
+
+  // Acquire concurrency slots
+  const acq = await acquireSemaphores(campaignId, callId);
+  if (!acq.ok) {
+    req.log.warn({ callId, campaignId, scope: acq.scope }, "concurrency limit exceeded");
+    return reply
+      .code(429)
+      .send({ code: "concurrency_limit", scope: acq.scope, limit: acq.limit, message: "Concurrency limit exceeded" });
+  }
+
   const agentId = (req.headers["x-agent-id"] as string) || undefined;
   const appJson = connectToRealtime(callId, agentId);
   return reply.send(appJson);
 });
 
-// Call status webhook
+// Call status webhook (generic)
 app.post("/status/:id", async (req) => {
   const { id } = req.params as any;
   const body: any = (req as any).body || {};
@@ -117,8 +248,135 @@ app.post("/status/:id", async (req) => {
     } catch {}
   }
 
-  req.log.info({ callId: id, status }, "jambonz status");
+  // Release concurrency when terminal
+  if (isTerminalStatus(status) || kind === "call.ended") {
+    await releaseSemaphoresByCall(id);
+  }
+
+  req.log.info({ callId: id, status }, "status");
   return { ok: true };
+});
+
+// ---- Jambonz integration (single-domain HTTPS webhooks) ----
+
+// Best-effort HMAC verification using shared secret
+function verifyJambonzHmac(secret: string | undefined, payload: unknown, signature?: string): boolean {
+  if (!secret) return true;
+  if (!signature) return false;
+  try {
+    const body = typeof payload === "string" ? payload : JSON.stringify(payload ?? {});
+    const mac = crypto.createHmac("sha256", secret).update(body).digest("hex");
+    const a = Buffer.from(mac, "utf8");
+    const b = Buffer.from(signature, "utf8");
+    if (a.length !== b.length) return false;
+    return crypto.timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Jambonz initial call webhook
+ * POST https://api.invortoai.com/telephony/jambonz/call
+ * Respond with a call-control JSON that starts bidirectional WS stream to realtime
+ */
+app.post("/telephony/jambonz/call", async (req, reply) => {
+  const body = (req as any).body || {};
+  const callId: string = body.call_sid || `c_${Math.random().toString(36).slice(2)}`;
+
+  // HMAC verification if configured
+  const secret = process.env.JAMBONZ_WEBHOOK_SECRET;
+  const sig = (req.headers["x-jambonz-signature"] ||
+               req.headers["x-hub-signature-256"] ||
+               req.headers["x-signature"] || "") as string;
+  if (!verifyJambonzHmac(secret, body, sig)) {
+    req.log.warn({ callId }, "invalid jambonz HMAC");
+    return reply.code(401).send({ code: "unauthorized" });
+  }
+
+  // Acquire concurrency slots
+  const campaignId = getCampaignId(req, body);
+  const acq = await acquireSemaphores(campaignId, callId);
+  if (!acq.ok) {
+    req.log.warn({ callId, campaignId, scope: acq.scope }, "concurrency limit exceeded");
+    return reply
+      .code(429)
+      .send({ code: "concurrency_limit", scope: acq.scope, limit: acq.limit, message: "Concurrency limit exceeded" });
+  }
+
+  const ws = (process.env.REALTIME_WS_URL || "wss://api.invortoai.com/realtime/voice").replace(/\/+$/, "");
+  const wsUrl = ws.includes("/realtime/voice") ? `${ws}?callId=${encodeURIComponent(callId)}` : `${ws}/${callId}`;
+
+  // Persist 'call.started'
+  try {
+    await redis.xadd(
+      `events:${callId}`,
+      "*",
+      "kind",
+      "call.started",
+      "payload",
+      JSON.stringify({ source: "pstn", provider: "jambonz", at: Date.now() })
+    );
+  } catch {}
+
+  // Return jambonz call-control response (stream verb as requested)
+  const response = {
+    application_sid: process.env.JAMBONZ_APPLICATION_SID || "",
+    call_hook: [
+      {
+        verb: "stream",
+        url: wsUrl,
+        metadata: { source: "pstn", provider: "jambonz" }
+      }
+    ]
+  };
+
+  return reply.send(response);
+});
+
+/**
+ * Jambonz call status webhook
+ * POST https://api.invortoai.com/telephony/jambonz/status
+ */
+app.post("/telephony/jambonz/status", async (req, reply) => {
+  const body: any = (req as any).body || {};
+  const callId: string = body.call_sid || body.id || `c_${Math.random().toString(36).slice(2)}`;
+
+  // HMAC verification if configured
+  const secret = process.env.JAMBONZ_WEBHOOK_SECRET;
+  const sig = (req.headers["x-jambonz-signature"] ||
+               req.headers["x-hub-signature-256"] ||
+               req.headers["x-signature"] || "") as string;
+  if (!verifyJambonzHmac(secret, body, sig)) {
+    req.log.warn({ callId }, "invalid jambonz HMAC");
+    return reply.code(401).send({ code: "unauthorized" });
+  }
+
+  const status = body.call_status || body.status || "unknown";
+  const kind =
+    status === "ringing" ? "call.ringing" :
+    (status === "in-progress" || status === "answered") ? "call.answered" :
+    (status === "completed" || status === "failed" || status === "no-answer") ? "call.ended" :
+    "call.status";
+
+  try {
+    await redis.xadd(
+      `events:${callId}`,
+      "*",
+      "kind",
+      kind,
+      "payload",
+      JSON.stringify({ raw: body })
+    );
+  } catch {}
+
+  // Release concurrency when terminal
+  if (isTerminalStatus(status) || kind === "call.ended") {
+    await releaseSemaphoresByCall(callId);
+  }
+
+  req.log.info({ callId, status }, "jambonz status");
+  return reply.send({ ok: true });
 });
 
 // Call transfer endpoint
@@ -215,7 +473,7 @@ app.post("/conference/:id", async (req, reply) => {
     );
     
     // Generate Jambonz conference application JSON
-    let conferenceApp;
+    let conferenceApp: any;
     if (action === "create") {
       conferenceApp = {
         verb: "conference",
@@ -362,7 +620,7 @@ app.post("/multiparty/:id", async (req, reply) => {
     );
 
     // Generate Jambonz multi-party application JSON
-    let multipartyApp;
+    let multipartyApp: any;
     if (action === "add") {
       multipartyApp = {
         verb: "conference",
@@ -524,62 +782,12 @@ app.get("/analytics/:id", async (req, reply) => {
   }
 });
 
-// Call quality monitoring
-app.post("/quality/:id", async (req, reply) => {
-  const { id } = req.params as any;
-  const { metric, value, threshold } = (req.body as any) || {};
-
-  if (!metric || value === undefined) {
-    return reply.code(400).send({ code: "bad_request", message: "metric and value required" });
-  }
-
-  try {
-    // Publish quality metric event
-    await redis.xadd(
-      `events:${id}`,
-      "*",
-      "kind",
-      "quality.metric",
-      "payload",
-      JSON.stringify({ metric, value, threshold, at: Date.now() })
-    );
-
-    // Check if metric exceeds threshold
-    const alertTriggered = threshold !== undefined && value > threshold;
-
-    if (alertTriggered) {
-      // Publish alert event
-      await redis.xadd(
-        `events:${id}`,
-        "*",
-        "kind",
-        "quality.alert",
-        "payload",
-        JSON.stringify({ metric, value, threshold, at: Date.now() })
-      );
-
-      req.log.warn({ callId: id, metric, value, threshold }, "Quality alert triggered");
-    }
-
-    return {
-      ok: true,
-      metric,
-      value,
-      threshold,
-      alertTriggered,
-    };
-  } catch (err) {
-    req.log.error({ err, callId: id }, "quality monitoring failed");
-    return reply.code(500).send({ code: "internal_error" });
-  }
-});
-
 // Get active calls
 app.get("/calls/active", async (req, reply) => {
   try {
     // Get all call event streams
     const keys = await redis.keys("events:*");
-    const activeCalls = [];
+    const activeCalls: Array<{ callId: string; lastEvent: string; lastEventTime: string | number | undefined }> = [];
     
     for (const key of keys) {
       const callId = key.replace("events:", "");
@@ -615,11 +823,11 @@ app.get("/calls/active", async (req, reply) => {
 });
 
 // Health check with Redis connectivity
-app.get("/health/detailed", async () => {
+app.get("/health/detailed", async (req) => {
   try {
     // Check Redis connectivity
     await redis.ping();
-    
+
     return {
       ok: true,
       service: "telephony",
@@ -638,9 +846,9 @@ app.get("/health/detailed", async () => {
 });
 
 const PORT = Number(process.env.PORT || 8085);
-app.listen({ port: PORT, host: "0.0.0.0" }).catch((err) => {
-  app.log.error(err);
-  process.exit(1);
-});
-
-
+if (!process.env.JEST_WORKER_ID && (process.env.NODE_ENV || "") !== "test") {
+  app.listen({ port: PORT, host: "0.0.0.0" }).catch((err) => {
+    app.log.error(err);
+    process.exit(1);
+  });
+}

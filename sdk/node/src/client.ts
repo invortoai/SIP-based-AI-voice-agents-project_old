@@ -27,7 +27,7 @@ export class InvortoClient implements InvortoClientInterface {
   private baseUrl: string;
   private tenantId?: string;
   
-  constructor(apiKey: string, baseUrl: string = "https://api.invorto.ai", tenantId?: string) {
+  constructor(apiKey: string, baseUrl: string = "https://api.invortoai.com", tenantId?: string) {
     this.apiKey = apiKey;
     this.baseUrl = baseUrl;
     this.tenantId = tenantId;

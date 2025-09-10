@@ -1,5 +1,6 @@
 import Fastify, { FastifyInstance } from "fastify";
 import client from "prom-client";
+import fastifyCors from "@fastify/cors";
 import crypto from "node:crypto";
 import Redis from "ioredis";
 import { z } from "zod";
@@ -32,7 +33,7 @@ await initializeObservability({
 const structuredLogger = new StructuredLogger("webhooks-service");
 const piiRedactor = new PIIRedactor();
 
-const app: FastifyInstance = Fastify({
+export const app: FastifyInstance = Fastify({
   logger: {
     level: process.env.LOG_LEVEL || "info",
     transport: {
@@ -43,6 +44,22 @@ const app: FastifyInstance = Fastify({
       },
     },
   },
+});
+
+// CORS: allow requests from the single-domain public origin
+const allowedOrigin = (() => {
+  const b = process.env.PUBLIC_BASE_URL || "";
+  try {
+    return b ? new URL(b).origin : true;
+  } catch {
+    return true;
+  }
+})();
+
+await app.register(fastifyCors, {
+  origin: allowedOrigin as any,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  credentials: false,
 });
 
 // Add security middleware
@@ -636,11 +653,13 @@ process.on("SIGTERM", async () => {
   process.exit(0);
 });
 
-app.listen({ port: PORT, host: "0.0.0.0" }).then(() => {
-  structuredLogger.info("Webhooks service started", { port: PORT });
-  customMetrics.incrementCounter("service_starts", { service: "webhooks" });
-}).catch((err) => {
-  const e = err as any;
-  structuredLogger.error("Failed to start webhooks service", e instanceof Error ? e : new Error(String(e?.message || e)));
-  process.exit(1);
-});
+if (!process.env.JEST_WORKER_ID && (process.env.NODE_ENV || "") !== "test") {
+  app.listen({ port: PORT, host: "0.0.0.0" }).then(() => {
+    structuredLogger.info("Webhooks service started", { port: PORT });
+    customMetrics.incrementCounter("service_starts", { service: "webhooks" });
+  }).catch((err) => {
+    const e = err as any;
+    structuredLogger.error("Failed to start webhooks service", e instanceof Error ? e : new Error(String(e?.message || e)));
+    process.exit(1);
+  });
+}

@@ -5,8 +5,24 @@ import Redis from "ioredis";
 import { s3Artifacts } from "./s3-helpers.js";
 import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 import client from "prom-client";
+import fastifyCors from "@fastify/cors";
 
-const app: FastifyInstance = Fastify({ logger: true });
+export const app: FastifyInstance = Fastify({ logger: true });
+
+const allowedOrigin = (() => {
+  const b = process.env.PUBLIC_BASE_URL || "";
+  try {
+    return b ? new URL(b).origin : true;
+  } catch {
+    return true;
+  }
+})();
+
+await app.register(fastifyCors, {
+  origin: allowedOrigin as any,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  credentials: false,
+});
 // Resolve secrets from AWS Secrets Manager if configured
 async function resolveSecret(name?: string) {
   if (!name) return undefined;
@@ -721,8 +737,10 @@ function safeJson(v?: string) {
 
 const PORT = Number(process.env.PORT || 8080);
 
-app.listen({ port: PORT, host: "0.0.0.0" }).catch((err) => {
-  app.log.error(err);
-  process.exit(1);
-});
+if (!process.env.JEST_WORKER_ID && (process.env.NODE_ENV || "") !== "test") {
+  app.listen({ port: PORT, host: "0.0.0.0" }).catch((err) => {
+    app.log.error(err);
+    process.exit(1);
+  });
+}
 
