@@ -59,7 +59,8 @@ export interface ToolCallMessage {
 export interface TtsChunkMessage {
   t: "tts.chunk";
   seq: number;
-  pcm16: Uint8Array;
+  // Accept multiple encodings used on the wire: raw bytes, base64 string, or numeric array
+  pcm16: Uint8Array | string | number[];
 }
 
 export interface ControlBargeInMessage {
@@ -93,6 +94,22 @@ export interface EmotionStateMessage {
   confidence?: number;
 }
 
+export interface ConnectedMessage {
+  t: "connected";
+  callId?: string;
+  timestamp?: number;
+}
+
+export interface ErrorMessage {
+  t: "error";
+  message: string;
+}
+
+export interface PongMessage {
+  t: "pong";
+  timestamp?: number;
+}
+
 export interface EndMessage {
   t: "end";
   reason: string;
@@ -107,6 +124,9 @@ export type ServerToClientMessage =
   | ControlBargeInMessage
   | EmotionWindowMessage
   | EmotionStateMessage
+  | ConnectedMessage
+  | PongMessage
+  | ErrorMessage
   | EndMessage;
 
 export type WsInbound = ClientToServerMessage;

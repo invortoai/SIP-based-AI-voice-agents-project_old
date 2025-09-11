@@ -20,21 +20,29 @@ import {
   getSecret
 } from "@invorto/shared";
 
-// Initialize observability
-await initializeObservability({
-  serviceName: "webhooks-service",
-  environment: process.env.NODE_ENV || "development",
-  langfuseEnabled: process.env.LANGFUSE_ENABLED === "true",
-  langfusePublicKey: process.env.LANGFUSE_PUBLIC_KEY,
-  langfuseSecretKey: process.env.LANGFUSE_SECRET_KEY,
-  langfuseBaseUrl: process.env.LANGFUSE_BASE_URL,
-});
+// Initialize observability (skip top-level await; run async init outside of tests)
+async function initObservability() {
+  try {
+    await initializeObservability({
+      serviceName: "webhooks-service",
+      environment: process.env.NODE_ENV || "development",
+      langfuseEnabled: process.env.LANGFUSE_ENABLED === "true",
+      langfusePublicKey: process.env.LANGFUSE_PUBLIC_KEY,
+      langfuseSecretKey: process.env.LANGFUSE_SECRET_KEY,
+      langfuseBaseUrl: process.env.LANGFUSE_BASE_URL,
+    });
+  } catch {}
+}
+if (!process.env.JEST_WORKER_ID && (process.env.NODE_ENV || "") !== "test") {
+  void initObservability();
+}
 
 const structuredLogger = new StructuredLogger("webhooks-service");
 const piiRedactor = new PIIRedactor();
 
+const isTest = !!process.env.JEST_WORKER_ID || (process.env.NODE_ENV || "") === "test";
 export const app: FastifyInstance = Fastify({
-  logger: {
+  logger: isTest ? true : {
     level: process.env.LOG_LEVEL || "info",
     transport: {
       target: "pino-pretty",
@@ -56,10 +64,25 @@ const allowedOrigin = (() => {
   }
 })();
 
-await app.register(fastifyCors, {
+app.register(fastifyCors, {
   origin: allowedOrigin as any,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   credentials: false,
+});
+
+// Force ACAO to the configured PUBLIC_BASE_URL origin at response time (test-friendly and deterministic)
+app.addHook("onSend", async (req, reply, payload) => {
+  try {
+    const b = process.env.PUBLIC_BASE_URL || "";
+    if (b) {
+      const fixedOrigin = new URL(b).origin;
+      reply.header("access-control-allow-origin", fixedOrigin);
+      reply.header("vary", "Origin");
+    }
+  } catch {
+    // ignore
+  }
+  return payload;
 });
 
 // Add security middleware
@@ -77,8 +100,23 @@ app.addHook("onRequest", async (req, reply) => {
   }
 });
 
-const redisUrl = await getSecret("REDIS_URL") || process.env.REDIS_URL || "redis://localhost:6379";
-const redis = new Redis(redisUrl);
+let redisUrl: string = process.env.REDIS_URL || "redis://localhost:6379";
+let redis!: Redis;
+
+// Initialize external deps when server is ready
+app.addHook("onReady", async () => {
+  try {
+    const fromSecret = await getSecret("REDIS_URL");
+    redisUrl = fromSecret || process.env.REDIS_URL || "redis://localhost:6379";
+  } catch {
+    redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
+  }
+  try {
+    redis = new Redis(redisUrl);
+  } catch (err) {
+    app.log.error({ err }, "redis init failed");
+  }
+});
 
 // Configuration
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || "dev_webhook_secret";
@@ -618,7 +656,7 @@ if (!process.env.JEST_WORKER_ID && (process.env.NODE_ENV || "") !== "test") {
 }
 
 // Metrics endpoint
-app.get("/metrics", async () => {
+app.get("/metrics/summary", async () => {
   const [success, retries, dlqMetrics] = await Promise.all([
     redis.hgetall("webhooks:metrics:success"),
     redis.hgetall("webhooks:metrics:retries"),

@@ -2,6 +2,72 @@ import WebSocket from 'ws';
 import { EventEmitter } from 'events';
 import { RealtimeConnection, RealtimeOptions, RealtimeEvent } from './types';
 import type { WsInbound, WsOutbound } from '@invorto/shared';
+import { z } from 'zod';
+
+/**
+ * Runtime validator for WsOutbound messages to protect SDK consumers.
+ * Accepts only the shapes used by the SDK and ignores unknown types.
+ */
+const SttPartialSchema = z.object({
+  t: z.literal('stt.partial'),
+  text: z.string(),
+  ts: z.number().optional()
+});
+const SttFinalSchema = z.object({
+  t: z.literal('stt.final'),
+  text: z.string(),
+  ts: z.number().optional()
+});
+const TtsChunkSchema = z.object({
+  t: z.literal('tts.chunk'),
+  // Server may send base64 string or numeric array; handle both
+  pcm16: z.union([z.string(), z.array(z.number()), z.any()]).optional(),
+});
+const ConnectedSchema = z.object({
+  t: z.literal('connected'),
+  callId: z.string().optional(),
+  timestamp: z.number().optional()
+});
+const ErrorSchema = z.object({
+  t: z.literal('error'),
+  message: z.string()
+});
+const PongSchema = z.object({
+  t: z.literal('pong'),
+  timestamp: z.number().optional()
+});
+
+function validateOutbound(msg: any): { ok: boolean; error?: string } {
+  try {
+    const t = msg?.t;
+    switch (t) {
+      case 'stt.partial':
+        SttPartialSchema.parse(msg);
+        break;
+      case 'stt.final':
+        SttFinalSchema.parse(msg);
+        break;
+      case 'tts.chunk':
+        TtsChunkSchema.parse(msg);
+        break;
+      case 'connected':
+        ConnectedSchema.parse(msg);
+        break;
+      case 'error':
+        ErrorSchema.parse(msg);
+        break;
+      case 'pong':
+        PongSchema.parse(msg);
+        break;
+      default:
+        // Unknown message types are forwarded to consumer as-is
+        return { ok: true };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: (e as any)?.message || 'invalid_message' };
+  }
+}
 
 export class RealtimeWebSocketClient extends EventEmitter implements RealtimeConnection {
   private ws: WebSocket | null = null;
@@ -171,6 +237,18 @@ export class RealtimeWebSocketClient extends EventEmitter implements RealtimeCon
             : (data as any)?.toString?.() ?? '';
       const message = JSON.parse(raw);
       const t = message.t || message.type;
+
+      // Runtime validation; emit error event for invalid payloads and stop processing
+      const validation = validateOutbound(message);
+      if (!validation.ok) {
+        const errorEvent: RealtimeEvent = {
+          type: 'error',
+          message: validation.error || 'invalid_message',
+          timestamp: new Date().toISOString()
+        };
+        this.emitEvent(errorEvent);
+        return;
+      }
 
       switch (t) {
         case 'pong':

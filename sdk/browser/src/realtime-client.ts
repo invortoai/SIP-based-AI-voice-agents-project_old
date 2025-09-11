@@ -1,4 +1,5 @@
 import type { WsInbound, WsOutbound } from "@invorto/shared";
+import { z } from "zod";
 
 export interface RealtimeOptions {
   audioFormat?: 'linear16' | 'mulaw' | 'alaw';
@@ -30,6 +31,88 @@ export interface RealtimeEvent {
   type: string;
   data: any;
   timestamp: number;
+}
+
+/**
+ * Runtime validators for server → client messages to harden browser SDK consumption.
+ * Unknown message types are allowed (forwarded), but known types are validated.
+ */
+const SttPartialSchema = z.object({
+  t: z.literal("stt.partial"),
+  text: z.string(),
+  ts: z.number().optional(),
+});
+const SttFinalSchema = z.object({
+  t: z.literal("stt.final"),
+  text: z.string(),
+  ts: z.number().optional(),
+});
+const TtsChunkSchema = z.object({
+  t: z.literal("tts.chunk"),
+  pcm16: z.union([z.instanceof(Uint8Array), z.string(), z.array(z.number())]).optional(),
+});
+const EmotionWindowSchema = z.object({
+  t: z.literal("emotion.window"),
+  energy_db: z.number(),
+  speaking: z.boolean(),
+});
+const EmotionStateSchema = z.object({
+  t: z.literal("emotion.state"),
+  class: z.string(),
+  arousal: z.number(),
+  valence: z.number(),
+  confidence: z.number().optional(),
+});
+const ErrorSchema = z.object({
+  t: z.literal("error"),
+  message: z.string(),
+});
+const PongSchema = z.object({
+  t: z.literal("pong"),
+  timestamp: z.number().optional(),
+});
+const ConnectedSchema = z.object({
+  t: z.literal("connected"),
+  callId: z.string().optional(),
+  timestamp: z.number().optional(),
+});
+
+function validateOutbound(msg: any): { ok: boolean; error?: string } {
+  try {
+    const t = msg?.t;
+    switch (t) {
+      case "stt.partial":
+        SttPartialSchema.parse(msg);
+        break;
+      case "stt.final":
+        SttFinalSchema.parse(msg);
+        break;
+      case "tts.chunk":
+        TtsChunkSchema.parse(msg);
+        break;
+      case "emotion.window":
+        EmotionWindowSchema.parse(msg);
+        break;
+      case "emotion.state":
+        EmotionStateSchema.parse(msg);
+        break;
+      case "error":
+        ErrorSchema.parse(msg);
+        break;
+      case "pong":
+        PongSchema.parse(msg);
+        break;
+      case "connected":
+        ConnectedSchema.parse(msg);
+        break;
+      default:
+        // allow unknown message types - pass through
+        return { ok: true };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: (e as any)?.message || "invalid_message" };
+  }
 }
 
 export class RealtimeClient {
@@ -129,6 +212,14 @@ export class RealtimeClient {
       this.ws.onmessage = (event) => {
         try {
           const message: WsOutbound = JSON.parse(event.data);
+          const validation = validateOutbound(message as any);
+          if (!validation.ok) {
+            this.stats.errors++;
+            // Surface error via onMessage hook to allow consumers to react
+            const errMsg = { t: "error", message: validation.error || "invalid_message" } as any;
+            if (this.onMessage) this.onMessage(errMsg);
+            return;
+          }
           this.handleMessage(message);
         } catch (error) {
           console.error("Failed to parse WebSocket message:", error);

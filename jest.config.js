@@ -23,6 +23,7 @@ module.exports = {
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
   moduleNameMapper: {
+    '^@invorto/shared$': '<rootDir>/tests/mocks/invorto-shared.ts',
     '^@invorto/shared/(.*)$': '<rootDir>/packages/shared/src/$1',
     '^@deepgram/sdk$': '<rootDir>/tests/mocks/deepgram-sdk.ts',
     '^ioredis$': '<rootDir>/tests/mocks/ioredis.ts',

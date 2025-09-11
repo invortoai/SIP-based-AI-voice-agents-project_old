@@ -32,5 +32,10 @@ export class TimelinePublisher {
       return event;
     });
   }
+
+  async close(): Promise<void> {
+    try { await (this.redis as any)?.quit?.(); } catch {}
+    try { (this.redis as any)?.disconnect?.(); } catch {}
+  }
 }
 
