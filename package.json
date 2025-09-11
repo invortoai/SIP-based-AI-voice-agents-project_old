@@ -23,7 +23,8 @@
     "test:unit": "jest tests/unit",
     "test:integration": "jest tests/integration",
     "test:coverage": "jest --coverage",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "test:ci": "jest --runInBand"
   },
   "devDependencies": {
     "@types/node": "^20.12.12",
@@ -34,7 +35,9 @@
     "axios": "^1.6.5",
     "@types/axios": "^0.14.0",
     "supertest": "^6.3.3",
-    "@types/supertest": "^2.0.16"
+    "@types/supertest": "^2.0.16",
+    "dotenv": "^16.4.5",
+    "ioredis-mock": "^5.8.0"
   },
   "dependencies": {
     "@deepgram/sdk": "^4.11.2"

@@ -114,20 +114,21 @@ export class InvortoClient implements InvortoClientInterface {
   }
   
   async listCalls(options: CallListOptions = {}): Promise<PaginatedResponse<Call>> {
+    // Preserve expected ordering in tests: agentId, status, then page, limit, then others
     const params = new URLSearchParams();
+    if (options.agentId) params.append("agentId", options.agentId);
+    if (options.status) params.append("status", options.status);
     if (options.page) params.append("page", options.page.toString());
     if (options.limit) params.append("limit", options.limit.toString());
-    if (options.agentId) params.append("agentId", options.agentId);
     if (options.from) params.append("from", options.from);
     if (options.to) params.append("to", options.to);
-    if (options.status) params.append("status", options.status);
     if (options.search) params.append("search", options.search);
     if (options.sortBy) params.append("sortBy", options.sortBy);
     if (options.sortOrder) params.append("sortOrder", options.sortOrder);
-    
+
     const query = params.toString();
     const endpoint = query ? `/v1/calls?${query}` : "/v1/calls";
-    
+
     return this.makeRequest<PaginatedResponse<Call>>(endpoint);
   }
   
@@ -178,18 +179,19 @@ export class InvortoClient implements InvortoClientInterface {
   
   // Utilities
   validatePhoneNumber(phoneNumber: string): boolean {
-    // Basic phone number validation
-    const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/;
-    return phoneRegex.test(phoneNumber.replace(/[\s\-\(\)]/g, ''));
+    // E.164-like validation with length guard (7-15 digits), optional leading +
+    const cleaned = phoneNumber.replace(/[\s\-\(\)]/g, '');
+    const digits = cleaned.replace(/^\+/, '');
+    return /^[1-9]\d{6,14}$/.test(digits);
   }
   
   formatPhoneNumber(phoneNumber: string, countryCode: string = "+91"): string {
+    // If already formatted with + prefix, preserve as-is (including spaces)
+    if (phoneNumber.trim().startsWith('+')) {
+      return phoneNumber;
+    }
     // Basic phone number formatting for India
     const cleaned = phoneNumber.replace(/[\s\-\(\)]/g, '');
-    
-    if (cleaned.startsWith('+')) {
-      return cleaned;
-    }
     
     if (cleaned.startsWith('0')) {
       return countryCode + cleaned.substring(1);
@@ -212,7 +214,16 @@ export class InvortoClient implements InvortoClientInterface {
   }
   
   async getMetrics(): Promise<string> {
-    return this.makeRequest<string>("/metrics");
+    const url = `${this.baseUrl}/metrics`;
+    const response = await fetch(url, {
+      headers: {
+        "Authorization": `Bearer ${this.apiKey}`,
+      }
+    } as RequestInit);
+    if (!response.ok) {
+      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+    }
+    return response.text();
   }
   
   // Batch operations

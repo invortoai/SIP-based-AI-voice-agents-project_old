@@ -1,6 +1,6 @@
 export interface InvortoClientInterface {
   // Agent Management
-  createAgent(config: AgentConfig): Promise<AgentResponse>;
+  createAgent(config: AgentConfig): Promise<Agent>;
   getAgent(agentId: string): Promise<Agent>;
   listAgents(options?: ListOptions): Promise<PaginatedResponse<Agent>>;
   updateAgent(agentId: string, updates: Partial<AgentConfig>): Promise<Agent>;
@@ -120,6 +120,8 @@ export interface RealtimeOptions {
   channels?: number;
   enableRecording?: boolean;
   enableTranscription?: boolean;
+  /** Optional agent identifier to be sent in WS start message and query param */
+  agentId?: string;
 }
 
 export interface RealtimeConnection {

@@ -69,7 +69,7 @@ export class RealtimeClient {
   private events: RealtimeEvent[] = [];
   
   constructor(
-    private baseUrl: string = "wss://api.invortoai.com",
+    private baseUrl: string = "wss://api.invortoai.com/realtime/voice",
     private options: RealtimeOptions = {}
   ) {
     this.maxReconnectAttempts = options.reconnectAttempts || 3;
@@ -103,7 +103,8 @@ export class RealtimeClient {
       }
   
       const qs = qp.toString();
-      const url = `${base}/realtime/voice?callId=${encodeURIComponent(callId)}${qs ? `&${qs}` : ""}`;
+      const pathBase = base.includes("/realtime/voice") ? base : `${base}/realtime/voice`;
+      const url = `${pathBase}?callId=${encodeURIComponent(callId)}${qs ? `&${qs}` : ""}`;
   
       // Use subprotocol to carry API key when possible
       this.ws = apiKey ? new WebSocket(url, [apiKey]) : new WebSocket(url);
@@ -365,7 +366,11 @@ export class RealtimeClient {
     if (!this.callId) return;
     
     try {
-      const response = await fetch(`${this.baseUrl.replace('wss://', 'https://').replace('ws://', 'http://')}/v1/realtime/${this.callId}/end`, {
+      // Derive API base from WS base (supports defaults and custom paths)
+      const wsUrl = new URL(this.baseUrl);
+      const apiOrigin = `${wsUrl.protocol.startsWith('wss') ? 'https:' : 'http:'}//${wsUrl.host}`;
+      const apiUrl = `${apiOrigin}/v1/realtime/${this.callId}/end`;
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

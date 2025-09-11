@@ -2,7 +2,7 @@ import Fastify, { FastifyInstance } from "fastify";
 import { Client } from "pg";
 import { z } from "zod";
 import Redis from "ioredis";
-import { s3Artifacts } from "./s3-helpers.js";
+import { s3Artifacts } from "./s3-helpers";
 import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 import client from "prom-client";
 import fastifyCors from "@fastify/cors";
@@ -18,7 +18,7 @@ const allowedOrigin = (() => {
   }
 })();
 
-await app.register(fastifyCors, {
+app.register(fastifyCors, {
   origin: allowedOrigin as any,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   credentials: false,
@@ -35,13 +35,26 @@ async function resolveSecret(name?: string) {
   }
 }
 
-const dbUrl = (await resolveSecret(process.env.AWS_SECRETS_DB_URL)) || process.env.DB_URL;
-const redisUrlEnv = (await resolveSecret(process.env.AWS_SECRETS_REDIS_URL)) || process.env.REDIS_URL || "redis://localhost:6379";
+let pg!: Client;
+let redis!: Redis;
 
-const pg = new Client({ connectionString: dbUrl });
-await pg.connect().catch((err: unknown) => {
-  app.log.error({ err }, "pg connect failed");
+// Initialize external deps before server starts listening
+app.addHook("onReady", async () => {
+  const dbUrl = (await resolveSecret(process.env.AWS_SECRETS_DB_URL)) || process.env.DB_URL;
+  const redisUrlEnv = (await resolveSecret(process.env.AWS_SECRETS_REDIS_URL)) || process.env.REDIS_URL || "redis://localhost:6379";
+
+  pg = new Client({ connectionString: dbUrl });
+  await pg.connect().catch((err: unknown) => {
+    app.log.error({ err }, "pg connect failed");
+  });
+
+  try {
+    redis = new Redis(redisUrlEnv);
+  } catch (err) {
+    app.log.error({ err }, "redis init failed");
+  }
 });
+
 // Set tenant_id for RLS (example: from header)
 app.addHook("onRequest", async (req) => {
   const tenantId = (req.headers["x-tenant-id"] || "t_demo").toString();
@@ -49,7 +62,6 @@ app.addHook("onRequest", async (req) => {
     await pg.query("select set_config('app.tenant_id', $1, true)", [tenantId]);
   } catch {}
 });
-const redis = new Redis(redisUrlEnv);
 
 app.get("/health", async () => ({ ok: true }));
 // --- Simple security middleware: IP allowlist + shared secret + PII redaction ---

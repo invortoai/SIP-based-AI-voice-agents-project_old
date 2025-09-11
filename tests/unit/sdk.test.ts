@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+/// <reference path="../jest-globals.d.ts" />
 import { InvortoClient } from '../../sdk/node/src/client';
 import { AgentConfig, CallOptions } from '../../sdk/node/src/types';
 
 // Mock fetch globally
-global.fetch = vi.fn();
+global.fetch = jest.fn() as any;
 
 describe('InvortoClient', () => {
   let client: InvortoClient;
@@ -12,7 +12,7 @@ describe('InvortoClient', () => {
 
   beforeEach(() => {
     client = new InvortoClient(mockApiKey, mockBaseUrl);
-    vi.clearAllMocks();
+    jest.clearAllMocks();
   });
 
   describe('constructor', () => {

@@ -609,11 +609,13 @@ async function webhookWorker() {
   }
 }
 
-// Start webhook worker
-webhookWorker().catch(err => {
-  app.log.fatal({ err }, "Webhook worker crashed");
-  process.exit(1);
-});
+// Start webhook worker (skip during tests)
+if (!process.env.JEST_WORKER_ID && (process.env.NODE_ENV || "") !== "test") {
+  webhookWorker().catch(err => {
+    app.log.fatal({ err }, "Webhook worker crashed");
+    process.exit(1);
+  });
+}
 
 // Metrics endpoint
 app.get("/metrics", async () => {

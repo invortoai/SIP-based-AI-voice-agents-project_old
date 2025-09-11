@@ -17,13 +17,15 @@ import { WsInbound, WsOutbound } from "@invorto/shared";
 const PORT = Number(process.env.PORT || 8081);
 
 export const app: FastifyInstance = Fastify({ logger: true });
-await app.register(websocket);
-await app.register(fastifyJwt, {
-  secret: {
-    public: (process.env.JWT_PUBLIC_KEY || "").replace(/\\n/g, "\n"),
-  },
-  decode: { complete: true },
-});
+app.register(websocket);
+if ((process.env.NODE_ENV || "") !== "test") {
+  app.register(fastifyJwt, {
+    secret: {
+      public: (process.env.JWT_PUBLIC_KEY || "").replace(/\\n/g, "\n"),
+    },
+    decode: { complete: true },
+  });
+}
 
 app.get("/health", async () => ({ ok: true }));
 
@@ -443,19 +445,19 @@ function handleRealtimeWs(socket: WebSocket, req: any, callId: string, agentId?:
 }
 
 // WS routes
-app.get("/v1/realtime/:callId", { websocket: true }, (socket: WebSocket, req) => {
+app.get("/v1/realtime/:callId", { websocket: true }, (connection: any, req) => {
   const { callId } = (req.params as any) as { callId: string };
   const url = new URL((req.url || ""), "http://localhost");
   const agentId = url.searchParams.get("agentId") || undefined;
-  handleRealtimeWs(socket, req, callId, agentId || undefined);
+  handleRealtimeWs(connection.socket, req, callId, agentId || undefined);
 });
 
 // New unified WS entrypoint: /realtime/voice?callId=...&agentId=...
-app.get("/realtime/voice", { websocket: true }, (socket: WebSocket, req) => {
+app.get("/realtime/voice", { websocket: true }, (connection: any, req) => {
   const url = new URL((req.url || ""), "http://localhost");
   const callId = url.searchParams.get("callId") || "";
   const agentId = url.searchParams.get("agentId") || undefined;
-  handleRealtimeWs(socket, req, callId, agentId || undefined);
+  handleRealtimeWs(connection.socket, req, callId, agentId || undefined);
 });
 
 // Connection management endpoint

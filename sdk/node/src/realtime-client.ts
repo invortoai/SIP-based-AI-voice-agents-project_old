@@ -1,6 +1,7 @@
 import WebSocket from 'ws';
 import { EventEmitter } from 'events';
 import { RealtimeConnection, RealtimeOptions, RealtimeEvent } from './types';
+import type { WsInbound, WsOutbound } from '@invorto/shared';
 
 export class RealtimeWebSocketClient extends EventEmitter implements RealtimeConnection {
   private ws: WebSocket | null = null;
@@ -19,7 +20,7 @@ export class RealtimeWebSocketClient extends EventEmitter implements RealtimeCon
 
   constructor(
     callId: string,
-    baseUrl: string,
+    baseUrl: string = process.env.API_BASE_URL || 'https://api.invortoai.com',
     apiKey: string,
     options: RealtimeOptions = {}
   ) {
@@ -41,8 +42,21 @@ export class RealtimeWebSocketClient extends EventEmitter implements RealtimeCon
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        const wsBase = this.baseUrl.replace(/^http/, 'ws').replace(/\/+$/, '');
-        const wsUrl = `${wsBase}/realtime/voice?callId=${encodeURIComponent(this.callId)}`;
+        const explicitWs = process.env.REALTIME_WS_URL?.replace(/\/+$/, '');
+        let wsUrl: string;
+        if (explicitWs) {
+          wsUrl = explicitWs.includes('/realtime/voice')
+            ? `${explicitWs}?callId=${encodeURIComponent(this.callId)}`
+            : `${explicitWs}/${encodeURIComponent(this.callId)}`;
+        } else {
+          const wsBase = this.baseUrl.replace(/^http/, 'ws').replace(/\/+$/, '');
+          wsUrl = `${wsBase}/realtime/voice?callId=${encodeURIComponent(this.callId)}`;
+        }
+        // Append agentId if provided
+        if (this.options?.agentId) {
+          wsUrl += (wsUrl.includes('?') ? '&' : '?') + `agentId=${encodeURIComponent(this.options.agentId)}`;
+        }
+
         const protocols = this.apiKey ? [this.apiKey] : undefined;
         this.ws = new WebSocket(wsUrl, protocols, {
           headers: {
@@ -56,12 +70,13 @@ export class RealtimeWebSocketClient extends EventEmitter implements RealtimeCon
           this.isReconnecting = false;
           this.startHeartbeat();
 
-          // Send initial connection message (server expects 't' field)
-          this.send({
+          // Send initial connection message (align with shared schema + server validation)
+          const startMsg: WsInbound = {
             t: 'start',
             callId: this.callId,
-            options: this.options
-          });
+            agentId: this.options?.agentId ?? 'node-sdk'
+          } as any;
+          this.send(startMsg);
 
           // Emit connected event
           const connectedEvent: RealtimeEvent = {
@@ -73,15 +88,15 @@ export class RealtimeWebSocketClient extends EventEmitter implements RealtimeCon
           resolve();
         });
 
-        this.ws.on('message', (data: Buffer) => {
-          this.handleMessage(data);
+        this.ws.on('message', (data) => {
+          this.handleMessage(data as any);
         });
 
         this.ws.on('error', (error) => {
           console.error('WebSocket error:', error);
           const errorEvent: RealtimeEvent = {
             type: 'error',
-            message: error.message,
+            message: (error as any)?.message ?? 'ws_error',
             timestamp: new Date().toISOString()
           };
           this.emitEvent(errorEvent);
@@ -145,9 +160,16 @@ export class RealtimeWebSocketClient extends EventEmitter implements RealtimeCon
     }, this.reconnectDelay * this.reconnectAttempts);
   }
 
-  private handleMessage(data: Buffer): void {
+  private handleMessage(data: WebSocket.RawData): void {
     try {
-      const message = JSON.parse(data.toString());
+      const raw = typeof data === 'string'
+        ? data
+        : Buffer.isBuffer(data)
+          ? data.toString()
+          : data instanceof ArrayBuffer
+            ? Buffer.from(new Uint8Array(data)).toString()
+            : (data as any)?.toString?.() ?? '';
+      const message = JSON.parse(raw);
       const t = message.t || message.type;
 
       switch (t) {

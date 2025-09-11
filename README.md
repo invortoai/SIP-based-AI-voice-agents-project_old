@@ -112,16 +112,44 @@ See `one_phase_ga_srs_invorto_voice_ai_voice_agent_platform.md` for complete spe
 
 ### 🧪 Testing
 
+Prerequisites:
+- Node.js 20+
+- npm
+- No external services are required for unit/integration tests; Redis is mocked via ioredis-mock in tests.
+
+Environment setup:
+- Copy `.env.example` to `.env` as needed.
+- For Jest runs, tests load `tests/.env.test` automatically (created in CI) and fall back to safe defaults in [tests/setup.ts](tests/setup.ts:1).
+- Telephony concurrency envs are enforced in code:
+  - TELEPHONY_GLOBAL_MAX_CONCURRENCY (global cap)
+  - TELEPHONY_PER_CAMPAIGN_MAX_CONCURRENCY (per-campaign cap)
+  - For local tests these default to small values; override in `tests/.env.test` if required.
+
+Common commands:
 ```bash
-# Run all tests
+# Install dependencies
+npm install
+
+# Run all tests (uses local jest binary)
 npm test
 
-# Type checking
-npm run typecheck
+# Run tests in-band (Windows-friendly and CI-safe)
+npm run test:ci
 
-# Build all packages
-npm run build
+# Run only unit tests
+npm run test:unit
+
+# Run only integration tests
+npm run test:integration
+
+# If you see "jest is not recognized", use npx to resolve local binary:
+npx jest --runInBand
 ```
+
+Notes:
+- If you encounter type errors about Jest matchers in the editor, a fallback is provided at [tests/jest-globals.d.ts](tests/jest-globals.d.ts:1), while CI uses @types/jest through ts-jest.
+- Integration tests spin up Fastify apps in-memory and mock external systems; services skip binding to network ports during tests via the JEST_WORKER_ID/NODE_ENV guards.
+- For environment overrides specific to tests, place them in `tests/.env.test` (e.g., TELEPHONY_GLOBAL_MAX_CONCURRENCY, TELEPHONY_PER_CAMPAIGN_MAX_CONCURRENCY).
 
 ### 📦 Development Scripts
 
@@ -142,3 +170,102 @@ PSTN/SIP ↔ Jambonz ↔ Realtime WS Gateway ↔ ASR ↔ Agent Runtime ↔ TTS
 
 Apache 2.0
 
+
+
+### ☎️ Jambonz SIP Edge Integration
+
+- SIP ingress/egress is handled by Jambonz. Calls are bridged to our realtime WS gateway.
+- Control flow:
+  - Inbound: Jambonz invokes our HTTPS hooks → we respond with a connect/stream verb pointing at our WS.
+  - Outbound: API can originate via Jambonz (optional) using call_hook and call_status_hook pointing back to us.
+
+Endpoints (single-domain)
+- REST (API): https://api.invortoai.com
+- Webhooks: https://api.invortoai.com/webhooks
+- Telephony hooks: https://api.invortoai.com/telephony/*
+- Realtime WS: wss://api.invortoai.com/realtime/voice
+
+Example Jambonz call control (connect/stream)
+{
+  "application_sid": "your-app-sid",
+  "call_hook": [
+    { "verb": "stream", "url": "wss://api.invortoai.com/realtime/voice?callId=${CALL_SID}", "metadata": { "source": "pstn", "provider": "jambonz" } }
+  ]
+}
+
+### 🔗 Call Hooks
+
+- call_hook (initial): POST https://api.invortoai.com/telephony/jambonz/call
+- call_status_hook (updates): POST https://api.invortoai.com/telephony/jambonz/status
+
+Recommended:
+- HMAC header (x-jambonz-signature) with shared secret (JAMBONZ_WEBHOOK_SECRET)
+- Retry: exponential backoff with jitter; idempotency keys by call_sid.
+
+Sample call_hook payload (Jambonz)
+{
+  "call_sid": "C123",
+  "direction": "inbound",
+  "from": "+1xxx",
+  "to": "+1yyy",
+  "call_status": "ringing"
+}
+
+### 🧵 Realtime WS Protocol
+
+- Endpoint: wss://api.invortoai.com/realtime/voice?callId=:id[&agentId=:agent]
+- Auth:
+  - Preferred: API key via Sec-WebSocket-Protocol subprotocol header.
+  - Also supported: Bearer token, optional HMAC via sig/ts query.
+- Messages (selected):
+  - Client→Server:
+    - {"t":"start","callId":"...","agentId":"..."}
+    - {"t":"dtmf.send","digits":"123","method":"rfc2833"}
+    - Binary audio frames: raw PCM16 LE, 16kHz, mono, 20–40 ms frames
+  - Server→Client:
+    - {"t":"connected","callId":"...","timestamp":...}
+    - {"t":"stt.partial","text":"..."} | {"t":"stt.final","text":"..."}
+    - {"t":"tts.chunk","seq":n,"pcm16":<Uint8Array or base64>}
+    - {"t":"emotion.window","energy_db":-45.0,"speaking":true}
+- Heartbeats: client may send {"t":"ping"}; server replies {"t":"pong","timestamp":...}
+- Reconnects: SDKs support auto-retry with backoff.
+
+### 🔐 Auth Modes
+
+- API key (preferred): WS subprotocol header; also accepted via query api_key or Authorization: Bearer.
+- Optional HMAC guard: sig and ts query parameters, verified as HMAC-SHA256(callId:ts).
+
+### ⚙️ Environment Variables (key)
+
+- PUBLIC_BASE_URL=https://api.invortoai.com
+- API_BASE_URL=https://api.invortoai.com/v1
+- REALTIME_WS_URL=wss://api.invortoai.com/realtime/voice
+- WEBHOOK_BASE_URL=https://api.invortoai.com/webhooks
+- TELEPHONY_WEBHOOK_BASE_URL=https://api.invortoai.com/telephony
+- REALTIME_API_KEY=...
+- REALTIME_WS_SECRET=... (for HMAC)
+- JAMBONZ_WEBHOOK_SECRET=...
+- TELEPHONY_GLOBAL_MAX_CONCURRENCY, TELEPHONY_PER_CAMPAIGN_MAX_CONCURRENCY, TELEPHONY_SEMAPHORE_TTL_SEC
+
+### 🧭 Runbooks (high-level)
+
+- Realtime incidents:
+  - Verify ALB target health; check service logs for unauthorized/forbidden_origin codes.
+  - Validate WS auth header and Origin; confirm REALTIME_WS_URL and PUBLIC_BASE_URL alignment.
+- Telephony congestion:
+  - Inspect /telephony/limits for global/campaign counts; adjust caps via env; ensure Redis reachable.
+- Webhook spikes:
+  - Monitor queue length; scale webhooks service; ensure HMAC verifies (shared secret set).
+
+### 🧪 SDK usage quickstart (defaults)
+
+Node
+import { InvortoClient } from "./sdk/node/src/client";
+const client = new InvortoClient(process.env.API_KEY || "");
+const rt = await client.connectToCall("call-123", { agentId: "agent-abc" });
+// send PCM16 Buffer frames via rt.sendAudio()
+
+Browser
+import { RealtimeClient } from "./sdk/browser/src/realtime-client";
+const rt = new RealtimeClient(); // wss://api.invortoai.com/realtime/voice
+await rt.connect("call-123","agent-abc","YOUR_API_KEY");

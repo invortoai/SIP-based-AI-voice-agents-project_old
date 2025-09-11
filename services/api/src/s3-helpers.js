@@ -2,7 +2,7 @@
 // Provides minimal async methods so routes can execute without AWS dependencies.
 
 export const s3Artifacts = {
-  async getCallArtifacts(callId: string) {
+  async getCallArtifacts(callId) {
     return {
       recording: `https://example.com/recordings/${callId}.wav`,
       transcription: 'Hello, how can I help you? I can assist with various tasks.',
@@ -11,11 +11,11 @@ export const s3Artifacts = {
     };
   },
 
-  async uploadRecording(callId: string, _buffer: Buffer | Uint8Array | any) {
+  async uploadRecording(callId, _buffer) {
     return `s3://mock-bucket/recordings/${callId}.wav`;
   },
 
-  async uploadSummary(callId: string, _summary: unknown) {
+  async uploadSummary(callId, _summary) {
     return `s3://mock-bucket/summaries/${callId}.json`;
   }
 };

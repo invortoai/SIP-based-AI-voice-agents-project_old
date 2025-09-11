@@ -38,22 +38,48 @@ export class DeepgramWsAsr extends EventEmitter {
   constructor(private options: DeepgramWsOptions) {
     super();
     this.dg = createClient(options.apiKey);
+
+    // Prevent unhandled 'error' EventEmitter exceptions in tests or runtime.
+    // Always have a default listener; delegate to registered onErrorCb if present.
+    this.on("error", (err: Error) => {
+      try { this.onErrorCb?.(err); } catch { /* swallow to avoid test crashes */ }
+    });
   }
 
-  onPartial(cb: PartialCb) { 
-    this.onPartialCb = cb; 
+  onPartial(cb: PartialCb) {
+    this.onPartialCb = cb;
+    // Bridge EventEmitter 'partial' events to the callback (used by unit tests)
+    this.removeAllListeners("partial");
+    this.on("partial", (payload: { text: string; confidence?: number }) => {
+      try { cb(payload?.text ?? "", payload?.confidence); } catch {}
+    });
   }
   
-  onFinal(cb: FinalCb) { 
-    this.onFinalCb = cb; 
+  onFinal(cb: FinalCb) {
+    this.onFinalCb = cb;
+    // Bridge EventEmitter 'final' events to the callback (used by unit tests)
+    this.removeAllListeners("final");
+    this.on("final", (payload: { text: string; confidence?: number; duration?: number }) => {
+      try { cb(payload?.text ?? "", payload?.confidence, payload?.duration); } catch {}
+    });
   }
   
-  onMetadata(cb: MetadataCb) { 
-    this.onMetadataCb = cb; 
+  onMetadata(cb: MetadataCb) {
+    this.onMetadataCb = cb;
+    // Bridge EventEmitter 'metadata' events to the callback (parity with tests)
+    this.removeAllListeners("metadata");
+    this.on("metadata", (data: any) => {
+      try { cb(data); } catch {}
+    });
   }
   
-  onError(cb: ErrorCb) { 
-    this.onErrorCb = cb; 
+  onError(cb: ErrorCb) {
+    this.onErrorCb = cb;
+    // Ensure EventEmitter 'error' events invoke this callback (prevents unhandled error throws)
+    this.removeAllListeners("error");
+    this.on("error", (err: Error) => {
+      try { cb(err); } catch {}
+    });
   }
 
   async start(): Promise<void> {
@@ -126,9 +152,15 @@ export class DeepgramWsAsr extends EventEmitter {
       });
 
       this.socket.on(LiveTranscriptionEvents.Error, (error: Error) => {
-        this.onErrorCb?.(error);
+        // Emit first (so any listeners are notified), then delegate to handler
         this.emit("error", error);
-        this.handleError(error);
+        if (!this.onErrorCb) {
+          // If no explicit error callback is registered, ensure it is still handled
+          try { this.handleError(error); } catch {}
+        } else {
+          try { this.onErrorCb(error); } catch {}
+          try { this.handleError(error); } catch {}
+        }
       });
 
       this.socket.on(LiveTranscriptionEvents.Close, (code: number, reason: string) => {

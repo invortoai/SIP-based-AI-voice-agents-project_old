@@ -17,7 +17,7 @@ const allowedOrigin = (() => {
   }
 })();
 
-await app.register(fastifyCors, {
+app.register(fastifyCors, {
   origin: allowedOrigin as any,
   methods: ["GET", "POST", "OPTIONS"],
   credentials: false,
