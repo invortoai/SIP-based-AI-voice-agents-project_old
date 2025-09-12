@@ -194,7 +194,7 @@ jobs:
     if: github.ref == 'refs/heads/develop'
     # environment:
     #   name: staging
-    #   url: https://staging.invorto.ai
+    #   url: https://staging.invortoai.com
     
     steps:
       - uses: actions/checkout@v4
@@ -233,7 +233,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     # environment:
     #   name: production
-    #   url: https://api.invorto.ai
+    #   url: https://api.invortoai.com
     
     steps:
       - uses: actions/checkout@v4
@@ -438,4 +438,4 @@ jobs:
           flags: --out cloud
         env:
           K6_CLOUD_TOKEN: ${{ secrets.K6_CLOUD_TOKEN }}
-          API_URL: https://staging.invorto.ai
+          API_URL: https://staging.invortoai.com
