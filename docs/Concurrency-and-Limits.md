@@ -5,8 +5,8 @@ This guide defines how concurrency is controlled end-to-end, which environment v
 Cross-references:
 
 - API limit checks: [services.api.index()](../services/api/src/index.ts:215)
-- Realtime/Webhooks (Redis-backed features): [services.realtime.index()](../services/realtime/src/index.ts:1), [services.webhooks.index()](../services/webhooks/src/index.ts:1)
-- Telephony service ingress (campaign/global enforcement site): [services.telephony.index()](../services/telephony/src/index.ts:1)
+- Realtime/Webhooks (Redis-backed features): [services.realtime.index()](../services/realtime/src/index.ts), [services.webhooks.index()](../services/webhooks/src/index.ts)
+- Telephony service ingress (campaign/global enforcement site): [services.telephony.index()](../services/telephony/src/index.ts)
 
 -------------------------------------------------------------------------------
 
@@ -37,7 +37,7 @@ Approved defaults for production:
 Where to set:
 
 - ECS Task Definitions via Terraform/CI (preferred)
-- Local: .env (see [.env.example](../.env.example:1))
+- Local: .env (see [.env.example](../.env.example))
 
 -------------------------------------------------------------------------------
 
@@ -48,7 +48,7 @@ Where to set:
   - Checks “concurrent calls” and “daily usage” (if enabled) to decide on 429 “rate_limit_exceeded” or “usage_cap_exceeded”.
   - This is not Redis-backed concurrency; it’s an API-level safety net.
 - Telephony service ingress (campaign/global):
-  - [services.telephony.index()](../services/telephony/src/index.ts:1)
+  - [services.telephony.index()](../services/telephony/src/index.ts)
   - Intended site for Redis-backed semaphores:
     - Key design: a global key for overall concurrency, and campaign keys per-campaign.
     - On receiving an inbound webhook, attempt to acquire slots (SET/INCR with expiry).
