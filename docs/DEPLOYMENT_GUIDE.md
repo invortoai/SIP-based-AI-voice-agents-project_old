@@ -7,9 +7,9 @@ Audience and purpose
   - Technical operators (DevOps/SRE/Platform): follow the detailed sections for infra provision, CI/CD, and runbooks.
 - What this consolidates
   - Supersedes and merges prior guides and notes:
-    - [NON_TECH_DEPLOYMENT_GUIDE.md](../NON_TECH_DEPLOYMENT_GUIDE.md:1)
-    - [docs.PRODUCTION-DEPLOYMENT.md](./PRODUCTION-DEPLOYMENT.md:1)
-    - Related operator addenda: [docs.Concurrency-and-Limits.md](./Concurrency-and-Limits.md:1)
+    - [NON_TECH_DEPLOYMENT_GUIDE.md](../NON_TECH_DEPLOYMENT_GUIDE.md)
+    - [docs.PRODUCTION-DEPLOYMENT.md](./PRODUCTION-DEPLOYMENT.md)
+    - Related operator addenda: [docs.Concurrency-and-Limits.md](./Concurrency-and-Limits.md)
 - Canonical domains and routes (single-domain model)
   - Production: api.invortoai.com
   - Staging: staging.invortoai.com
@@ -63,13 +63,13 @@ Prerequisites
 
 Key references
 
-- CI pipeline: [.github.workflows.ci.yml](../.github/workflows/ci.yml:1)
+- CI pipeline: [.github.workflows.ci.yml](../.github/workflows/ci.yml)
 - Services:
-  - [services.api.index()](../services/api/src/index.ts:1)
-  - [services.realtime.index()](../services/realtime/src/index.ts:1)
-  - [services.webhooks.index()](../services/webhooks/src/index.ts:1)
-  - [services.telephony.index()](../services/telephony/src/index.ts:1)
-- Concurrency controls: [docs.Concurrency-and-Limits.md](./Concurrency-and-Limits.md:1)
+  - [services.api.index()](../services/api/src/index.ts)
+  - [services.realtime.index()](../services/realtime/src/index.ts)
+  - [services.webhooks.index()](../services/webhooks/src/index.ts)
+  - [services.telephony.index()](../services/telephony/src/index.ts)
+- Concurrency controls: [docs.Concurrency-and-Limits.md](./Concurrency-and-Limits.md)
 
 -------------------------------------------------------------------------------
 
@@ -128,13 +128,13 @@ Internal ALB target health checks
 Concurrency defaults (approved)
 
 - GLOBAL=10000, PER_CAMPAIGN=100, TTL=600, API guard MAX_CONCURRENT_CALLS=200
-- See detailed operator notes: [docs.Concurrency-and-Limits.md](./Concurrency-and-Limits.md:1)
+- See detailed operator notes: [docs.Concurrency-and-Limits.md](./Concurrency-and-Limits.md)
 
 -------------------------------------------------------------------------------
 
 5) Application build and release (CI/CD)
 
-Source of truth: [.github.workflows.ci.yml](../.github/workflows/ci.yml:1)
+Source of truth: [.github.workflows.ci.yml](../.github/workflows/ci.yml)
 
 Key pipeline behaviors
 
@@ -191,10 +191,10 @@ Development (local)
 
 - docker compose up -d for Postgres and Redis
 - Run services locally:
-  - [services.api.index()](../services/api/src/index.ts:1)
-  - [services.realtime.index()](../services/realtime/src/index.ts:1)
-  - [services.webhooks.index()](../services/webhooks/src/index.ts:1)
-  - [services.telephony.index()](../services/telephony/src/index.ts:1)
+  - [services.api.index()](../services/api/src/index.ts)
+  - [services.realtime.index()](../services/realtime/src/index.ts)
+  - [services.webhooks.index()](../services/webhooks/src/index.ts)
+  - [services.telephony.index()](../services/telephony/src/index.ts)
 - Local health checks:
   - <http://localhost:8080/health> (API)
   - <http://localhost:8081/health> (Realtime)
@@ -261,7 +261,7 @@ Automatic rollback
 Manual rollback
 
 - Revert to the previous task definition revision:
-  - See example commands in the production runbook: [docs.PRODUCTION-DEPLOYMENT.md](./PRODUCTION-DEPLOYMENT.md:1)
+  - See example commands in the production runbook: [docs.PRODUCTION-DEPLOYMENT.md](./PRODUCTION-DEPLOYMENT.md)
 
 DR considerations
 
