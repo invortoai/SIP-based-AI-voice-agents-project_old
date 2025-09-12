@@ -325,7 +325,7 @@ await rt.connect("call-123","agent-abc","YOUR_API_KEY");
 ### Concurrency & Campaign Limits
 
 - Full guide with defaults, metrics, and tuning recommendations:
-  - [docs.Concurrency-and-Limits.md](docs/Concurrency-and-Limits.md:1)
+  - [docs.Concurrency-and-Limits.md](docs/Concurrency-and-Limits.md)
 - Key environment variables and defaults:
   - TELEPHONY_GLOBAL_MAX_CONCURRENCY (global cap)
   - TELEPHONY_PER_CAMPAIGN_MAX_CONCURRENCY (per-campaign cap)
