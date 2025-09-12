@@ -6,7 +6,7 @@ This repository contains the one-phase GA implementation scaffold for the Invort
 
 For a complete, copy-paste runnable, first-time production deployment guide (AWS + ECS + OIDC + Terraform), see:
 
-- [docs.PRODUCTION-DEPLOYMENT.md](docs/PRODUCTION-DEPLOYMENT.md:1)
+- [docs.PRODUCTION-DEPLOYMENT.md](docs/PRODUCTION-DEPLOYMENT.md)
 
 The runbook documents:
 
