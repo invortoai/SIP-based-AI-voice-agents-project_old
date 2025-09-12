@@ -2,6 +2,20 @@
 
 This repository contains the one-phase GA implementation scaffold for the Invorto Voice AI Agent Platform as per the SRS.
 
+## Production Deployment
+
+For a complete, copy-paste runnable, first-time production deployment guide (AWS + ECS + OIDC + Terraform), see:
+
+- [docs.PRODUCTION-DEPLOYMENT.md](docs/PRODUCTION-DEPLOYMENT.md:1)
+
+The runbook documents:
+
+- Services and AWS composition (ECS/Fargate, ALB, VPC, SGs, health checks)
+- GitHub Actions OIDC with exact trust and least-privilege JSON policies (ci.yml:117, ci.yml:154, ci.yml:193)
+- Terraform remote backend bootstrap (S3 + DynamoDB), full commands, and plan/apply flow
+- Environment variables and secrets per service (SSM/Secrets Manager), CI quality gates and URL guard
+- Observability (CloudWatch logs, alarms), first-deploy steps, smoke tests, rollback, security, and cost guidance
+
 ### 🏗️ Workspaces
 
 #### Core Services

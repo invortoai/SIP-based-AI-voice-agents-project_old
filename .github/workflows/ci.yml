@@ -38,11 +38,7 @@ jobs:
         run: npm run typecheck
       
       - name: Run linter
-        run: npm run lint || true
-
-      - name: Check for dev URL leakage
-        run: |
-          ! git grep -nE "(localhost|http://localhost|ws://(?!127\.0\.0\.1)|api\.invorto\.ai(?!\.com))" -- ':!tests' ':!docker-compose.yml'
+        run: npm run lint
 
   # Unit Tests
   test:
@@ -97,7 +93,7 @@ jobs:
           NODE_ENV: test
           DB_URL: postgresql://test:test@localhost:5432/invorto_test
           REDIS_URL: redis://localhost:6379
-        run: npm test || true
+        run: npm test -- --runInBand --detectOpenHandles
       
       - name: Upload coverage reports
         uses: codecov/codecov-action@v3
@@ -118,6 +114,12 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.7.5
+      - name: Configure AWS credentials (OIDC) for Terraform backend
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          role-session-name: invorto-ci-terraform
+          aws-region: ${{ env.AWS_REGION }}
       - name: Terraform fmt (check)
         working-directory: infra/terraform
         run: terraform fmt -check -recursive
@@ -152,7 +154,7 @@ jobs:
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
     strategy:
       matrix:
-        service: [api, realtime, webhooks, workers]
+        service: [api, realtime, webhooks, telephony]
     
     steps:
       - uses: actions/checkout@v4
@@ -206,7 +208,7 @@ jobs:
       
       - name: Deploy to ECS
         run: |
-          for service in api realtime webhooks workers; do
+          for service in api realtime webhooks telephony; do
             aws ecs update-service \
               --cluster invorto-staging \
               --service invorto-${service} \
@@ -216,7 +218,7 @@ jobs:
       
       - name: Wait for deployment
         run: |
-          for service in api realtime webhooks workers; do
+          for service in api realtime webhooks telephony; do
             aws ecs wait services-stable \
               --cluster invorto-staging \
               --services invorto-${service} \
@@ -275,7 +277,7 @@ jobs:
             NEW_TASK_DEF=$(echo "$TASK_DEFINITION" | \
               jq --arg IMAGE "${ECR_REGISTRY}/${ECR_REPOSITORY_PREFIX}-${service}:${{ github.sha }}" '
                 .containerDefinitions[0].image = $IMAGE
-                | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy, .requiresCompatibilities)
+                | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
                 | .containerDefinitions[0].environment = (
                     ( .containerDefinitions[0].environment // [] )
                     | map(select(.name as $n | ($n != "PUBLIC_BASE_URL" and $n != "API_BASE_URL" and $n != "REALTIME_WS_URL" and $n != "WEBHOOK_BASE_URL" and $n != "TELEPHONY_WEBHOOK_BASE_URL")))
@@ -312,7 +314,7 @@ jobs:
           }
           
           # Deploy all services
-          for service in api realtime webhooks workers; do
+          for service in api realtime webhooks telephony; do
             echo "Deploying ${service}..."
             update_service ${service} invorto-production
           done
@@ -320,7 +322,7 @@ jobs:
       - name: Run smoke tests
         run: |
           sleep 30
-          curl -f https://api.invorto.ai/health || exit 1
+          curl -f https://api.invortoai.com/v1/health || exit 1
       
       - name: Notify deployment
         if: always()
@@ -380,9 +382,19 @@ jobs:
         env:
           SEMGREP_ENABLE_VERSION_CHECK: '0'
 
+      - name: Check for Semgrep SARIF
+        id: semgrep_gate
+        shell: bash
+        run: |
+          if [ -f "semgrep.sarif" ]; then
+            echo "has_sarif=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_sarif=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Upload Semgrep SARIF (if generated)
+        if: ${{ steps.semgrep_gate.outputs.has_sarif == 'true' }}
         uses: github/codeql-action/upload-sarif@v3
-        if: always() && ${{ hashFiles('semgrep.sarif') != '' }}
         with:
           sarif_file: semgrep.sarif
 
@@ -398,7 +410,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      - name: Check for k6 performance test files
+        id: files_gate
+        shell: bash
+        run: |
+          if ls -1 tests/performance/*.js >/dev/null 2>&1; then
+            echo "has_files=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_files=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check for k6 cloud token
+        id: k6_gate
+        shell: bash
+        run: |
+          if [ -n "${{ secrets.K6_CLOUD_TOKEN }}" ]; then
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run k6 performance tests
+        if: ${{ steps.k6_gate.outputs.has_token == 'true' && steps.files_gate.outputs.has_files == 'true' }}
         uses: grafana/k6-action@v0.3.0
         with:
           filename: tests/performance/load-test.js

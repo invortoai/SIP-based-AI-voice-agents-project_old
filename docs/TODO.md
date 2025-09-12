@@ -3,6 +3,7 @@
 This checklist tracks remaining work and recent follow‑ups, grouped by area. Each task includes: Title, Why, References, Priority, Status, Owner, and Acceptance Criteria.
 
 Note on links/references
+
 - File references are clickable in the required format, for example: [services.api.index()](services/api/src/index.ts:1), [services.realtime.index()](services/realtime/src/index.ts:1), [docs.Concurrency-and-Limits.md](docs/Concurrency-and-Limits.md:1).
 - Language constructs are referenced using a function-like notation in brackets as required, for example: [TimelinePublisher.getEvents()](services/realtime/src/timeline/redis.ts:14).
 
@@ -216,7 +217,7 @@ Note on links/references
   - Status: Pending
   - Owner: Unassigned
   - Acceptance Criteria:
-    - Add a job step to grep for patterns: (localhost|ws://(?!127.0.0.1)|http://localhost|api\.invorto\.ai(?!\.com)); fail on match except under tests.
+    - Add a job step to grep for patterns: (localhost|ws://(?!127.0.0.1)|<http://localhost|api\.invorto\.ai(?!\.com)>); fail on match except under tests.
     - Document rule in README; job runs on PRs and main.
 
 - [ ] Title: Fix any path/tooling issues for cross-platform file references in docs/tests

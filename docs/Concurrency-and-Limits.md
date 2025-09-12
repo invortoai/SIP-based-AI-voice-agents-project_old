@@ -20,7 +20,7 @@ Cross-references:
 
 -------------------------------------------------------------------------------
 
-2) Environment variables (production defaults)
+2 Environment variables (production defaults)
 
 Approved defaults for production:
 

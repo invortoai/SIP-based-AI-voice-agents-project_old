@@ -6,6 +6,8 @@ Format: Keep/Changelog style with concise sections. Dates are in YYYY-MM-DD.
 
 ## [Unreleased]
 
+- Consolidated production deployment runbook and deprecation of scattered deployment guides.
+
 ### Added
 
 - Production Deployment Runbook with AWS OIDC and Terraform/ECS workflows:
