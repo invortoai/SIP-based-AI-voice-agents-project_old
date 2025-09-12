@@ -100,7 +100,7 @@ GitHub Actions OIDC (no static keys)
   - Optional: S3/DynamoDB for Terraform backend access during CI validation
 - Add its ARN as GitHub repository secret AWS_OIDC_ROLE_ARN.
 - Assumed by jobs in:
-  - [.github.workflows.ci.yml](../.github/workflows/ci.yml:1)
+  - [.github.workflows.ci.yml](../.github/workflows/ci.yml)
 
 -------------------------------------------------------------------------------
 
