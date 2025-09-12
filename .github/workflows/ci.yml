@@ -432,7 +432,7 @@ jobs:
 
       - name: Run k6 performance tests
         if: ${{ steps.k6_gate.outputs.has_token == 'true' && steps.files_gate.outputs.has_files == 'true' }}
-        uses: grafana/k6-action@v0.3.0
+        uses: grafana/k6-action@v0.3.1
         with:
           filename: tests/performance/load-test.js
           flags: --out cloud
