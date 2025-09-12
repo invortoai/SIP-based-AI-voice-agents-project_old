@@ -269,3 +269,42 @@ Browser
 import { RealtimeClient } from "./sdk/browser/src/realtime-client";
 const rt = new RealtimeClient(); // wss://api.invortoai.com/realtime/voice
 await rt.connect("call-123","agent-abc","YOUR_API_KEY");
+
+
+### SDK URL overrides
+
+- Node SDK defaults:
+  - Base HTTP API: https://api.invortoai.com
+  - Realtime WS URL resolution:
+    - If REALTIME_WS_URL is set, it takes precedence and is used directly.
+    - Otherwise, the HTTP base is converted to ws(s) and suffixed with /realtime/voice.
+  - Implementation references:
+    - [sdk.node.client()](sdk/node/src/client.ts:30)
+    - [sdk.node.realtime-client()](sdk/node/src/realtime-client.ts:89)
+    - [sdk.node.realtime-client.connect()](sdk/node/src/realtime-client.ts:108)
+
+- Browser SDK defaults:
+  - Default WebSocket base: wss://api.invortoai.com/realtime/voice
+  - To override (e.g., local dev), pass a custom base to the constructor:
+    - const rt = new RealtimeClient("ws://127.0.0.1:8081");
+    - It will append /realtime/voice if missing and add query parameters.
+  - Implementation references:
+    - [sdk.browser.realtime-client()](sdk/browser/src/realtime-client.ts:155)
+
+- Tests covering URL selection:
+  - [tests.unit.sdk-url-defaults()](tests/unit/sdk-url-defaults.test.ts:1)
+  - [tests.integration.node-sdk-realtime()](tests/integration/node-sdk-realtime.test.ts:1)
+  - [tests.integration.browser-sdk-realtime()](tests/integration/browser-sdk-realtime.test.ts:1)
+
+### Concurrency & Campaign Limits
+
+- Full guide with defaults, metrics, and tuning recommendations:
+  - [docs.Concurrency-and-Limits.md](docs/Concurrency-and-Limits.md:1)
+- Key environment variables and defaults:
+  - TELEPHONY_GLOBAL_MAX_CONCURRENCY (global cap)
+  - TELEPHONY_PER_CAMPAIGN_MAX_CONCURRENCY (per-campaign cap)
+  - TELEPHONY_SEMAPHORE_TTL_SEC (slot TTL)
+  - MAX_CONCURRENT_CALLS (API-level outbound call guard)
+- Related code paths:
+  - API concurrency checks in [services.api.index()](services/api/src/index.ts:238)
+  - Telephony webhooks and queues in [services.telephony.index()](services/telephony/src/index.ts:1)

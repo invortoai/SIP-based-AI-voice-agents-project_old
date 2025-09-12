@@ -300,6 +300,13 @@ const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
 const timeline = new TimelinePublisher(redisUrl);
 const webhookQ = new Redis(redisUrl);
 
+// Ensure external resources are closed when Fastify shuts down (helps Jest open-handles)
+app.addHook("onClose", async () => {
+  try { await (timeline as any)?.close?.(); } catch {}
+  try { await (webhookQ as any)?.quit?.(); } catch {}
+  try { (webhookQ as any)?.disconnect?.(); } catch {}
+});
+
 function handleRealtimeWs(socket: any, req: any, callId: string, agentId?: string) {
   // Normalize to a ws-like object (send/close/on)
   socket = resolveWsSocket(socket);
@@ -682,7 +689,9 @@ app.get("/v1/realtime/:callId/stats", async (req, reply) => {
 // Graceful shutdown
 process.on("SIGTERM", async () => {
   try { await app.close(); } catch {}
-  try { webhookQ.disconnect(); } catch {}
+  try { await (timeline as any)?.close?.(); } catch {}
+  try { await (webhookQ as any)?.quit?.(); } catch {}
+  try { (webhookQ as any)?.disconnect?.(); } catch {}
   process.exit(0);
 });
 

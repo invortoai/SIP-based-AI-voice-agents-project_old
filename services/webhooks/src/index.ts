@@ -685,11 +685,18 @@ app.get("/metrics/summary", async () => {
 
 const PORT = Number(process.env.PORT || 8082);
 
+// Close external resources on Fastify shutdown (parity with API/Realtime)
+app.addHook("onClose", async () => {
+  try { await (redis as any)?.quit?.(); } catch {}
+  try { (redis as any)?.disconnect?.(); } catch {}
+});
+
 // Graceful shutdown
 process.on("SIGTERM", async () => {
   structuredLogger.info("SIGTERM received, shutting down gracefully");
   await app.close();
-  redis.disconnect();
+  try { await (redis as any)?.quit?.(); } catch {}
+  try { (redis as any)?.disconnect?.(); } catch {}
   process.exit(0);
 });
 
