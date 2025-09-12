@@ -324,8 +324,20 @@ jobs:
           sleep 30
           curl -f https://api.invortoai.com/v1/health || exit 1
       
+      - name: Check Slack webhook configured
+        id: slack_gate
+        shell: bash
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+        run: |
+          if [ -n "$SLACK_WEBHOOK_URL" ]; then
+            echo "has_slack=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_slack=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Notify deployment
-        if: always()
+        if: ${{ always() && steps.slack_gate.outputs.has_slack == 'true' }}
         uses: slackapi/slack-github-action@v1.24.0
         with:
           payload: |
