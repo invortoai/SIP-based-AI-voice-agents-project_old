@@ -7,6 +7,7 @@ Format: Keep/Changelog style with concise sections. Dates are in YYYY-MM-DD.
 ## [Unreleased]
 
 ### Added
+
 - Production Deployment Runbook with AWS OIDC and Terraform/ECS workflows:
   - [docs.PRODUCTION-DEPLOYMENT.md](docs/PRODUCTION-DEPLOYMENT.md:1) covers:
     - Environment variables and approved defaults (including TELEPHONY_GLOBAL_MAX_CONCURRENCY=10000, TELEPHONY_PER_CAMPAIGN_MAX_CONCURRENCY=100, TELEPHONY_SEMAPHORE_TTL_SEC=600, MAX_CONCURRENT_CALLS=200)
@@ -27,12 +28,14 @@ Format: Keep/Changelog style with concise sections. Dates are in YYYY-MM-DD.
   - [ci.yml](.github/workflows/ci.yml:29)
 
 ### Changed
+
 - Shared WebSocket message schema widened to accept multiple encodings for tts.chunk and added server→client messages connected/pong/error:
   - [packages.shared.messages()](packages/shared/src/messages.ts:59)
 - Browser SDK built artifact corrected to default wss://api.invortoai.com/realtime/voice and /realtime/voice URL assembly:
   - [sdk.browser.dist.realtime-client()](sdk/browser/dist/realtime-client.js:8)
 
 ### Tests
+
 - Integration tests for SDK realtime connectivity:
   - Node SDK: [tests.integration.node-sdk-realtime()](tests/integration/node-sdk-realtime.test.ts:1)
   - Browser SDK (ws polyfill): [tests.integration.browser-sdk-realtime()](tests/integration/browser-sdk-realtime.test.ts:1)
@@ -42,10 +45,12 @@ Format: Keep/Changelog style with concise sections. Dates are in YYYY-MM-DD.
   - [tests.unit.sdk-validation()](tests/unit/sdk-validation.test.ts:1)
 
 ### CI/CD
+
 - OIDC-ready workflows for build/deploy (requires AWS_OIDC_ROLE_ARN secret)
 - Terraform validation and plan job that uploads plan.txt and outputs.json artifacts
 - Security scanners (Trivy gated on HIGH/CRITICAL, tfsec, Semgrep) and CodeQL maintained
 
 ### Notes
+
 - Please configure AWS OIDC before production deploys. See [docs.PRODUCTION-DEPLOYMENT.md](docs/PRODUCTION-DEPLOYMENT.md:1).
 - Ensure branch protection requires test/lint/terraform-validate/security-scan/codeql/hadolint/build.

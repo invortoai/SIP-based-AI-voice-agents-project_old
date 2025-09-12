@@ -5,6 +5,7 @@ This repository contains the one-phase GA implementation scaffold for the Invort
 ### 🏗️ Workspaces
 
 #### Core Services
+
 - `packages/shared`: Shared types, message schemas, utilities
 - `services/realtime`: WebSocket gateway for realtime audio and events
 - `services/api`: REST API for agents, calls, metrics
@@ -12,11 +13,13 @@ This repository contains the one-phase GA implementation scaffold for the Invort
 - `services/workers`: Background workers for Redis Streams and S3 artifacts
 
 #### SDKs
+
 - `sdk/node`: Node.js/TypeScript server SDK
 - `sdk/python`: Python SDK with Pydantic models
 - `sdk/browser-realtime`: Browser WebSocket realtime client
 
 #### Infrastructure
+
 - `infra/terraform`: Terraform IaC for AWS deployment
 
 ### 🚀 Quick Start
@@ -27,6 +30,7 @@ This repository contains the one-phase GA implementation scaffold for the Invort
    - Python 3.9+ (for Python SDK)
 
 2. **Setup**
+
    ```bash
    # Clone and install
    git clone <repository>
@@ -49,6 +53,7 @@ This repository contains the one-phase GA implementation scaffold for the Invort
 ### 📚 SDK Usage
 
 #### Node.js
+
 ```typescript
 import { InvortoClient } from '@invorto/server';
 
@@ -60,6 +65,7 @@ const agent = await client.createAgent({
 ```
 
 #### Python
+
 ```python
 from invorto import InvortoClient, AgentConfig
 
@@ -71,6 +77,7 @@ agent = client.create_agent(AgentConfig(
 ```
 
 #### Browser
+
 ```typescript
 import { RealtimeClient } from '@invorto/browser-realtime';
 
@@ -91,6 +98,7 @@ terraform apply -var="environment=dev"
 ```
 
 **Components:**
+
 - VPC with 3 AZs private, 2 AZs public
 - ECS Fargate cluster for services
 - ALB with WebSocket support and WAF
@@ -101,6 +109,7 @@ terraform apply -var="environment=dev"
 ### 🔄 CI/CD
 
 GitHub Actions workflows for:
+
 - Build & test on PRs
 - Security scanning with Trivy
 - Staging deployment on `develop` branch
@@ -113,11 +122,13 @@ See `one_phase_ga_srs_invorto_voice_ai_voice_agent_platform.md` for complete spe
 ### 🧪 Testing
 
 Prerequisites:
+
 - Node.js 20+
 - npm
 - No external services are required for unit/integration tests; Redis is mocked via ioredis-mock in tests.
 
 Environment setup:
+
 - Copy `.env.example` to `.env` as needed.
 - For Jest runs, tests load `tests/.env.test` automatically (created in CI) and fall back to safe defaults in [tests/setup.ts](tests/setup.ts:1).
 - Telephony concurrency envs are enforced in code:
@@ -126,6 +137,7 @@ Environment setup:
   - For local tests these default to small values; override in `tests/.env.test` if required.
 
 Common commands:
+
 ```bash
 # Install dependencies
 npm install
@@ -147,6 +159,7 @@ npx jest --runInBand
 ```
 
 Notes:
+
 - If you encounter type errors about Jest matchers in the editor, a fallback is provided at [tests/jest-globals.d.ts](tests/jest-globals.d.ts:1), while CI uses @types/jest through ts-jest.
 - Integration tests spin up Fastify apps in-memory and mock external systems; services skip binding to network ports during tests via the JEST_WORKER_ID/NODE_ENV guards.
 - For environment overrides specific to tests, place them in `tests/.env.test` (e.g., TELEPHONY_GLOBAL_MAX_CONCURRENCY, TELEPHONY_PER_CAMPAIGN_MAX_CONCURRENCY).
@@ -170,8 +183,6 @@ PSTN/SIP ↔ Jambonz ↔ Realtime WS Gateway ↔ ASR ↔ Agent Runtime ↔ TTS
 
 Apache 2.0
 
-
-
 ### ☎️ Jambonz SIP Edge Integration
 
 - SIP ingress/egress is handled by Jambonz. Calls are bridged to our realtime WS gateway.
@@ -180,9 +191,10 @@ Apache 2.0
   - Outbound: API can originate via Jambonz (optional) using call_hook and call_status_hook pointing back to us.
 
 Endpoints (single-domain)
-- REST (API): https://api.invortoai.com
-- Webhooks: https://api.invortoai.com/webhooks
-- Telephony hooks: https://api.invortoai.com/telephony/*
+
+- REST (API): <https://api.invortoai.com>
+- Webhooks: <https://api.invortoai.com/webhooks>
+- Telephony hooks: <https://api.invortoai.com/telephony/>*
 - Realtime WS: wss://api.invortoai.com/realtime/voice
 
 Example Jambonz call control (connect/stream)
@@ -195,10 +207,11 @@ Example Jambonz call control (connect/stream)
 
 ### 🔗 Call Hooks
 
-- call_hook (initial): POST https://api.invortoai.com/telephony/jambonz/call
-- call_status_hook (updates): POST https://api.invortoai.com/telephony/jambonz/status
+- call_hook (initial): POST <https://api.invortoai.com/telephony/jambonz/call>
+- call_status_hook (updates): POST <https://api.invortoai.com/telephony/jambonz/status>
 
 Recommended:
+
 - HMAC header (x-jambonz-signature) with shared secret (JAMBONZ_WEBHOOK_SECRET)
 - Retry: exponential backoff with jitter; idempotency keys by call_sid.
 
@@ -237,11 +250,11 @@ Sample call_hook payload (Jambonz)
 
 ### ⚙️ Environment Variables (key)
 
-- PUBLIC_BASE_URL=https://api.invortoai.com
-- API_BASE_URL=https://api.invortoai.com/v1
+- PUBLIC_BASE_URL=<https://api.invortoai.com>
+- API_BASE_URL=<https://api.invortoai.com/v1>
 - REALTIME_WS_URL=wss://api.invortoai.com/realtime/voice
-- WEBHOOK_BASE_URL=https://api.invortoai.com/webhooks
-- TELEPHONY_WEBHOOK_BASE_URL=https://api.invortoai.com/telephony
+- WEBHOOK_BASE_URL=<https://api.invortoai.com/webhooks>
+- TELEPHONY_WEBHOOK_BASE_URL=<https://api.invortoai.com/telephony>
 - REALTIME_API_KEY=...
 - REALTIME_WS_SECRET=... (for HMAC)
 - JAMBONZ_WEBHOOK_SECRET=...
@@ -270,11 +283,10 @@ import { RealtimeClient } from "./sdk/browser/src/realtime-client";
 const rt = new RealtimeClient(); // wss://api.invortoai.com/realtime/voice
 await rt.connect("call-123","agent-abc","YOUR_API_KEY");
 
-
 ### SDK URL overrides
 
 - Node SDK defaults:
-  - Base HTTP API: https://api.invortoai.com
+  - Base HTTP API: <https://api.invortoai.com>
   - Realtime WS URL resolution:
     - If REALTIME_WS_URL is set, it takes precedence and is used directly.
     - Otherwise, the HTTP base is converted to ws(s) and suffixed with /realtime/voice.
