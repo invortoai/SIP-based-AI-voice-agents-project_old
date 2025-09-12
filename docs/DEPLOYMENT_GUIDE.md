@@ -8,7 +8,6 @@ Audience and purpose
 - What this consolidates
   - Supersedes and merges prior guides and notes:
     - [NON_TECH_DEPLOYMENT_GUIDE.md](../NON_TECH_DEPLOYMENT_GUIDE.md:1)
-    - [CORE_SERVICES_COMPLETION_SUMMARY.md](../CORE_SERVICES_COMPLETION_SUMMARY.md:1)
     - [docs.PRODUCTION-DEPLOYMENT.md](./PRODUCTION-DEPLOYMENT.md:1)
     - Related operator addenda: [docs.Concurrency-and-Limits.md](./Concurrency-and-Limits.md:1)
 - Canonical domains and routes (single-domain model)
@@ -302,8 +301,6 @@ This guide consolidates and supersedes overlapping topics from:
 
 - [NON_TECH_DEPLOYMENT_GUIDE.md](../NON_TECH_DEPLOYMENT_GUIDE.md)
   - Keep for introductory context; deployment sections are superseded here.
-- [CORE_SERVICES_COMPLETION_SUMMARY.md](../CORE_SERVICES_COMPLETION_SUMMARY.md:1)
-  - Service readiness summarized above; detailed completion notes remain as project status history.
 - [docs.PRODUCTION-DEPLOYMENT.md](./PRODUCTION-DEPLOYMENT.md)
   - Production step-by-step is expanded and aligned to the current pipeline; use it for live operations.
 - [docs.Concurrency-and-Limits.md](./Concurrency-and-Limits.md)
