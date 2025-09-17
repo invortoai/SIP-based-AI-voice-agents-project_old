@@ -110,9 +110,150 @@ module "redis" {
 # S3 Buckets for recordings, transcripts, metrics
 module "s3" {
   source = "../modules/s3"
-  
+
   environment = var.environment
   bucket_prefix = "invorto"
+}
+
+# Telephony Service S3 Bucket for call recordings and logs
+resource "aws_s3_bucket" "telephony_data" {
+  bucket = "${var.environment}-invorto-telephony-data"
+
+  tags = {
+    Name        = "${var.environment}-invorto-telephony-data"
+    Environment = var.environment
+    Service     = "telephony"
+    Purpose     = "call-recordings-logs"
+  }
+}
+
+resource "aws_s3_bucket_versioning" "telephony_data" {
+  bucket = aws_s3_bucket.telephony_data.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "telephony_data" {
+  bucket = aws_s3_bucket.telephony_data.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+    bucket_key_enabled = true
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "telephony_data" {
+  bucket = aws_s3_bucket.telephony_data.id
+
+  rule {
+    id     = "call_recordings_lifecycle"
+    status = "Enabled"
+
+    filter {
+      prefix = "recordings/"
+    }
+
+    transition {
+      days          = 30
+      storage_class = "STANDARD_IA"
+    }
+
+    transition {
+      days          = 90
+      storage_class = "GLACIER"
+    }
+
+    expiration {
+      days = 365
+    }
+  }
+
+  rule {
+    id     = "logs_lifecycle"
+    status = "Enabled"
+
+    filter {
+      prefix = "logs/"
+    }
+
+    transition {
+      days          = 30
+      storage_class = "STANDARD_IA"
+    }
+
+    expiration {
+      days = 90
+    }
+  }
+}
+
+# IAM Role for Telephony Service
+resource "aws_iam_role" "telephony_task_role" {
+  name = "${var.environment}-telephony-task-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ecs-tasks.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Environment = var.environment
+    Service     = "telephony"
+  }
+}
+
+resource "aws_iam_role_policy" "telephony_task_policy" {
+  name = "${var.environment}-telephony-task-policy"
+  role = aws_iam_role.telephony_task_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          aws_s3_bucket.telephony_data.arn,
+          "${aws_s3_bucket.telephony_data.arn}/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "cloudwatch:PutMetricData",
+          "cloudwatch:GetMetricData",
+          "cloudwatch:ListMetrics"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:DescribeLogStreams"
+        ]
+        Resource = "arn:aws:logs:*:*:*"
+      }
+    ]
+  })
 }
 
 # Secrets Manager for provider keys, HMAC, JWT
