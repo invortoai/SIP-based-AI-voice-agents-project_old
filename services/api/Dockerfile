@@ -1,22 +1,32 @@
-FROM node:20-alpine AS base
-WORKDIR /app
+# Monorepo-aware Dockerfile using root context and workspace installs
+# Build context must be the repo root (set in compose or CI)
+FROM node:20-alpine AS deps
+WORKDIR /workspace
 
-FROM base AS deps
-COPY package.json package-lock.json* ./
-COPY ../../package.json ../../package-lock.json* ./
-RUN npm ci --omit=dev || npm ci --omit=dev --workspaces=false
+# Copy root manifests and workspace package manifests to enable npm workspaces install
+COPY package.json package-lock.json ./
+COPY packages/*/package.json packages/*/
+COPY services/*/package.json services/*/
+COPY sdk/*/package.json sdk/*/
+RUN npm ci
 
-FROM base AS build
-COPY --from=deps /app /app
+# Build only this workspace
+FROM deps AS build
 COPY . .
-RUN npm run build
+RUN npm run -w services/api build
+# Prune dev deps after build to slim runtime node_modules
+RUN npm prune --omit=dev
 
+# Runtime image
 FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=build /app/dist ./dist
-COPY package.json ./
-RUN npm pkg set scripts.start="node dist/index.js"
+# Copy production node_modules from build (includes workspace deps like @invorto/shared)
+COPY --from=build /workspace/node_modules ./node_modules
+# Copy built service
+COPY --from=build /workspace/services/api/dist ./dist
+# Copy service package.json (start script already defined)
+COPY --from=build /workspace/services/api/package.json ./package.json
 EXPOSE 8080
-CMD ["npm", "start"]
+CMD ["node", "dist/index.js"]
 

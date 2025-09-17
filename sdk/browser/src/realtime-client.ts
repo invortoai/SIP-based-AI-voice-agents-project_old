@@ -1,4 +1,4 @@
-import type { WsInbound, WsOutbound } from "@invorto/shared";
+import type { WsInbound, WsOutbound } from "@invorto/shared-core";
 import { z } from "zod";
 
 export interface RealtimeOptions {

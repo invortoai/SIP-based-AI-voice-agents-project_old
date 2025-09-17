@@ -8,7 +8,7 @@ import { EnergyMeter } from './energyMeter.js';
 import { AudioAnalyzer } from './audioAnalyzer.js';
 import { AdvancedEndpointing, EndpointingConfig } from './endpointing.js';
 import { ToolRegistry } from '../tools/registry.js';
-import { WsOutbound } from '@invorto/shared';
+import type { WsOutbound } from '@invorto/shared';
 
 export enum ConversationState {
   IDLE = 'idle',
