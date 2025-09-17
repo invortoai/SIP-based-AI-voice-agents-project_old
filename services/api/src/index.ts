@@ -2,7 +2,8 @@ import Fastify, { FastifyInstance } from "fastify";
 import { Client } from "pg";
 import { z } from "zod";
 import Redis from "ioredis";
-import { s3Artifacts } from "./s3-helpers";
+import type { Redis as RedisType } from "ioredis";
+import { s3Artifacts } from "./s3-helpers.js";
 import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 import client from "prom-client";
 import fastifyCors from "@fastify/cors";
@@ -53,7 +54,7 @@ async function resolveSecret(name?: string) {
 
 let pg!: Client;
 let pgReady = false;
-let redis!: Redis;
+let redis!: RedisType;
 
 // Initialize external deps before server starts listening
 app.addHook("onReady", async () => {
@@ -63,7 +64,7 @@ app.addHook("onReady", async () => {
   // In test runs, avoid opening real DB sockets which can timeout or keep open handles
   if (process.env.JEST_WORKER_ID || (process.env.NODE_ENV || "") === "test") {
     try {
-      redis = new Redis(redisUrlEnv);
+      redis = new (Redis as any)(redisUrlEnv);
     } catch (err) {
       app.log.error({ err }, "redis init failed");
     }
@@ -99,7 +100,7 @@ app.addHook("onReady", async () => {
   }
 
   try {
-    redis = new Redis(redisUrlEnv);
+    redis = new (Redis as any)(redisUrlEnv);
   } catch (err) {
     app.log.error({ err }, "redis init failed");
   }
@@ -321,7 +322,7 @@ app.get("/v1/calls/:id/timeline", async (req, reply) => {
   const { id } = (req.params as any) as { id: string };
   try {
     const entries = await redis.xrange(`events:${id}`, "-", "+", "COUNT", 500);
-    const timeline = entries.map(([, fields]) => {
+    const timeline = (entries as Array<[string, string[]]>).map(([, fields]) => {
       const rec: Record<string, string> = {} as any;
       for (let i = 0; i < fields.length; i += 2) rec[String(fields[i])] = String(fields[i + 1]);
       return { kind: rec.kind, payload: safeJson(rec.payload) };

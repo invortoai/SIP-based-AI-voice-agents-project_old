@@ -1,6 +1,6 @@
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
-import { Resource } from '@opentelemetry/resources';
+import * as otelResources from '@opentelemetry/resources';
 import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
@@ -60,11 +60,16 @@ export async function initializeObservability(config: {
   langfuseSecretKey?: string;
   langfuseBaseUrl?: string;
 }) {
-  const resource = new Resource({
-    [SemanticResourceAttributes.SERVICE_NAME]: config.serviceName,
-    [SemanticResourceAttributes.SERVICE_VERSION]: process.env.SERVICE_VERSION || '1.0.0',
-    [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: config.environment || process.env.NODE_ENV || 'development',
-  });
+  // Defensive construction to avoid TS issues when Resource is type-only in some setups
+  const resource =
+    (otelResources as any).Resource
+      ? new (otelResources as any).Resource({
+          [SemanticResourceAttributes.SERVICE_NAME]: config.serviceName,
+          [SemanticResourceAttributes.SERVICE_VERSION]: process.env.SERVICE_VERSION || '1.0.0',
+          [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]:
+            config.environment || process.env.NODE_ENV || 'development',
+        })
+      : undefined;
 
   // Trace exporter
   const traceExporter = new OTLPTraceExporter({
@@ -309,12 +314,29 @@ export class StructuredLogger {
     logger.warn(message, { ...this.getMetadata(), ...data });
   }
 
-  error(message: string, error?: Error, data?: any) {
+  error(message: string, errOrData?: unknown, data?: any) {
+    let err: Error | undefined;
+    let extra: any = data;
+
+    if (errOrData instanceof Error) {
+      err = errOrData;
+    } else if (errOrData && typeof errOrData === 'object') {
+      const obj = errOrData as Record<string, any>;
+      if ('error' in obj && obj.error instanceof Error) {
+        err = obj.error as Error;
+      }
+      // Merge entire object into extra to preserve fields like url, attempts, data, etc.
+      extra = { ...obj, ...(data || {}) };
+    } else if (errOrData !== undefined) {
+      // Primitive or other value provided as second arg; treat as extra data
+      extra = { value: errOrData, ...(data || {}) };
+    }
+
     logger.error(message, {
       ...this.getMetadata(),
-      error: error?.message,
-      stack: error?.stack,
-      ...data,
+      error: err?.message,
+      stack: err?.stack,
+      ...extra,
     });
   }
 

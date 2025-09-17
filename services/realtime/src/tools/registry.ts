@@ -1,4 +1,4 @@
-import { ToolExecutor, ToolDefinition } from './executor';
+import { ToolExecutor, ToolDefinition } from './executor.js';
 
 export interface ToolRegistryConfig {
   redisUrl: string;

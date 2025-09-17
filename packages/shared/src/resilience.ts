@@ -276,47 +276,8 @@ export class ASRFailover extends FailoverManager {
       {
         name: 'deepgram',
         priority: 1,
-        execute: async (audio: Uint8Array) => {
-          // Deepgram ASR implementation
-          const { DeepgramWsAsr } = await import('../../services/realtime/src/adapters/asr/deepgram_ws');
-          const asr = new DeepgramWsAsr({
-            apiKey: process.env.DEEPGRAM_API_KEY!,
-            language: 'en-US',
-          });
-          await asr.start();
-          await asr.pushPcm16(audio);
-          return new Promise((resolve) => {
-            asr.onFinal((text) => resolve(text));
-          });
-        },
-        healthCheck: async () => {
-          // Check Deepgram API health
-          try {
-            const response = await fetch('https://api.deepgram.com/v1/status', {
-              headers: { Authorization: `Token ${process.env.DEEPGRAM_API_KEY}` },
-            });
-            return response.ok;
-          } catch {
-            return false;
-          }
-        },
-      },
-      {
-        name: 'google',
-        priority: 2,
-        execute: async (audio: Uint8Array) => {
-          // Google Speech-to-Text fallback
-          // Implementation would go here
-          throw new Error('Google STT not implemented');
-        },
-      },
-      {
-        name: 'azure',
-        priority: 3,
-        execute: async (audio: Uint8Array) => {
-          // Azure Speech Services fallback
-          // Implementation would go here
-          throw new Error('Azure STT not implemented');
+        execute: async (_audio: Uint8Array) => {
+          throw new Error('ASR provider not wired at shared layer. Implement in service.');
         },
       },
     ];
@@ -338,43 +299,8 @@ export class LLMFailover extends FailoverManager {
       {
         name: 'openai-gpt4',
         priority: 1,
-        execute: async (prompt: string, messages: any[]) => {
-          const { OpenAiClient } = await import('../../services/realtime/src/adapters/llm/openai');
-          const client = new OpenAiClient({
-            apiKey: process.env.OPENAI_API_KEY!,
-            model: 'gpt-4o-mini',
-          });
-          await client.start(prompt);
-          await client.provideUserText(messages[messages.length - 1].content);
-          return new Promise((resolve) => {
-            client.onCompletion((text) => resolve(text));
-          });
-        },
-        healthCheck: async () => {
-          try {
-            const response = await fetch('https://api.openai.com/v1/models', {
-              headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-            });
-            return response.ok;
-          } catch {
-            return false;
-          }
-        },
-      },
-      {
-        name: 'anthropic-claude',
-        priority: 2,
-        execute: async (prompt: string, messages: any[]) => {
-          // Anthropic Claude fallback
-          throw new Error('Claude not implemented');
-        },
-      },
-      {
-        name: 'llama-local',
-        priority: 3,
-        execute: async (prompt: string, messages: any[]) => {
-          // Local Llama model fallback
-          throw new Error('Local Llama not implemented');
+        execute: async (_prompt: string, _messages: any[]) => {
+          throw new Error('LLM provider not wired at shared layer. Implement in service.');
         },
       },
     ];
@@ -396,42 +322,8 @@ export class TTSFailover extends FailoverManager {
       {
         name: 'deepgram',
         priority: 1,
-        execute: async (text: string) => {
-          const { DeepgramTtsClient } = await import('../../services/realtime/src/adapters/tts/deepgram');
-          const tts = new DeepgramTtsClient({
-            apiKey: process.env.DEEPGRAM_API_KEY!,
-            voiceId: 'aura-asteria-en',
-          });
-          const chunks: Uint8Array[] = [];
-          tts.onChunk((chunk) => chunks.push(chunk));
-          await tts.synthesize(text);
-          return Buffer.concat(chunks);
-        },
-        healthCheck: async () => {
-          try {
-            const response = await fetch('https://api.deepgram.com/v1/status', {
-              headers: { Authorization: `Token ${process.env.DEEPGRAM_API_KEY}` },
-            });
-            return response.ok;
-          } catch {
-            return false;
-          }
-        },
-      },
-      {
-        name: 'elevenlabs',
-        priority: 2,
-        execute: async (text: string) => {
-          // ElevenLabs TTS fallback
-          throw new Error('ElevenLabs TTS not implemented');
-        },
-      },
-      {
-        name: 'google',
-        priority: 3,
-        execute: async (text: string) => {
-          // Google Text-to-Speech fallback
-          throw new Error('Google TTS not implemented');
+        execute: async (_text: string) => {
+          throw new Error('TTS provider not wired at shared layer. Implement in service.');
         },
       },
     ];
@@ -542,7 +434,7 @@ export class RateLimiter {
   }
 }
 
-// Export singleton instances
-export const asrFailover = new ASRFailover();
-export const llmFailover = new LLMFailover();
-export const ttsFailover = new TTSFailover();
+// Provider singletons are application-specific and should be created in the service layer.
+// export const asrFailover = new ASRFailover();
+// export const llmFailover = new LLMFailover();
+// export const ttsFailover = new TTSFailover();

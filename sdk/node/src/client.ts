@@ -19,8 +19,8 @@ import {
   TenantUsage,
   CallAnalytics,
   RealtimeEvent
-} from "./types";
-import { RealtimeWebSocketClient } from "./realtime-client";
+} from "./types.js";
+import { RealtimeWebSocketClient } from "./realtime-client.js";
 
 export class InvortoClient implements InvortoClientInterface {
   private apiKey: string;

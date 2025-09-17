@@ -29,10 +29,11 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           queries: security-extended,security-and-quality
-      - name: Install dependencies
-        run: npm ci
-      - name: Build
-        run: npm run build --if-present
+          build-mode: none
+      - name: Install dependencies (skipped for CodeQL)
+        run: echo "Skipping npm ci for CodeQL buildless mode"
+      - name: Build (skipped for CodeQL)
+        run: echo "Skipping build for CodeQL buildless mode"
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
         with:

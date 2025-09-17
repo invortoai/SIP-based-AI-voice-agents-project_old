@@ -443,7 +443,7 @@ const wsServer = new WebSocketServer({
 });
 
 // Use WebSocket server for GraphQL subscriptions
-const serverCleanup = useServer({ schema }, wsServer);
+const serverCleanup = useServer({ schema }, wsServer as any);
 
 // Create Apollo Server
 const server = new ApolloServer({
@@ -478,7 +478,7 @@ export async function startGraphQLServer(port = 4000) {
   );
 
   // GraphQL Playground
-  app.get('/', (req, res) => {
+  app.get('/', (req: express.Request, res: express.Response) => {
     res.send(`
       <html>
         <head>

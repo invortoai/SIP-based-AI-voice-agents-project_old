@@ -4,11 +4,11 @@ import websocket from "@fastify/websocket";
 import fastifyJwt from "@fastify/jwt";
 import { WebSocket, RawData, WebSocketServer } from "ws";
 import crypto from "crypto";
-import { AgentRuntime } from "./runtime/agent";
-import { TimelinePublisher } from "./timeline/redis";
+import { AgentRuntime } from "./runtime/agent.js";
+import { TimelinePublisher } from "./timeline/redis.js";
 import Redis from "ioredis";
-import { JitterBuffer } from "./runtime/jitterBuffer";
-import { EnergyMeter } from "./runtime/energyMeter";
+import { JitterBuffer } from "./runtime/jitterBuffer.js";
+import { EnergyMeter } from "./runtime/energyMeter.js";
 import { WsInbound, WsOutbound } from "@invorto/shared";
 // simplified runtime: remove external observability/security dependencies
 
@@ -298,7 +298,7 @@ if (!process.env.JEST_WORKER_ID && (process.env.NODE_ENV || "") !== "test") {
 
 const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
 const timeline = new TimelinePublisher(redisUrl);
-const webhookQ = new Redis(redisUrl);
+const webhookQ = new (Redis as any)(redisUrl);
 
 // Ensure external resources are closed when Fastify shuts down (helps Jest open-handles)
 app.addHook("onClose", async () => {

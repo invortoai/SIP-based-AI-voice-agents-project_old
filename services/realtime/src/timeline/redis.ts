@@ -1,9 +1,10 @@
 import Redis from "ioredis";
+import type { Redis as RedisType } from "ioredis";
 
 export class TimelinePublisher {
-  private redis: Redis;
+  private redis: RedisType;
   constructor(url: string) {
-    this.redis = new Redis(url);
+    this.redis = new (Redis as any)(url);
   }
 
   async publish(callId: string, kind: string, payload: unknown) {
@@ -15,7 +16,7 @@ export class TimelinePublisher {
     const stream = `events:${callId}`;
     const events = await this.redis.xrange(stream, "-", "+", "COUNT", count);
 
-    return events.map(([id, fields]) => {
+    return (events as Array<[string, string[]]>).map(([id, fields]) => {
       const event: any = { id };
       for (let i = 0; i < fields.length; i += 2) {
         const key = fields[i];
@@ -38,4 +39,4 @@ export class TimelinePublisher {
     try { (this.redis as any)?.disconnect?.(); } catch {}
   }
 }
-
+ 

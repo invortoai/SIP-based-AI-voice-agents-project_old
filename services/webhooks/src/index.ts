@@ -3,6 +3,7 @@ import client from "prom-client";
 import fastifyCors from "@fastify/cors";
 import crypto from "node:crypto";
 import Redis from "ioredis";
+import type { Redis as RedisType } from "ioredis";
 import { z } from "zod";
 import {
   initializeObservability,
@@ -12,13 +13,13 @@ import {
   healthChecker,
   createSpan,
   recordException
-} from "@invorto/shared";
+} from "@invorto/shared/dist/observability.js";
 import {
   requestSanitizer,
   apiKeyManager,
   PIIRedactor,
   getSecret
-} from "@invorto/shared";
+} from "@invorto/shared/dist/security.js";
 
 // Initialize observability (skip top-level await; run async init outside of tests)
 async function initObservability() {
@@ -101,7 +102,7 @@ app.addHook("onRequest", async (req, reply) => {
 });
 
 let redisUrl: string = process.env.REDIS_URL || "redis://localhost:6379";
-let redis!: Redis;
+let redis!: RedisType;
 
 // Initialize external deps when server is ready
 app.addHook("onReady", async () => {
@@ -112,7 +113,7 @@ app.addHook("onReady", async () => {
     redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
   }
   try {
-    redis = new Redis(redisUrl);
+    redis = new (Redis as any)(redisUrl);
   } catch (err) {
     app.log.error({ err }, "redis init failed");
   }
@@ -619,7 +620,7 @@ async function webhookWorker() {
 
         } else {
           // Move to DLQ
-          await redis.lpush("webhooks:dlq", JSON.stringify(job));
+          await (redis as any).lpush("webhooks:dlq", JSON.stringify(job));
           await redis.expire(`webhooks:dlq`, DLQ_TTL);
 
           app.log.error({

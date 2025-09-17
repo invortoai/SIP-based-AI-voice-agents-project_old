@@ -1,6 +1,8 @@
-import Ajv, { JSONSchemaType } from "ajv";
+import * as AjvModule from "ajv";
+import type { JSONSchemaType } from "ajv";
 import { v4 as uuidv4 } from "uuid";
 import Redis from "ioredis";
+import type { Redis as RedisType } from "ioredis";
 
 export interface ToolDefinition {
   name: string;
@@ -22,11 +24,13 @@ export interface ToolResult {
 }
 
 export class ToolExecutor {
-  private ajv = new Ajv({ allErrors: true, strict: false });
-  private redis: Redis;
+  private ajv: any;
+  private redis: RedisType;
 
   constructor(redisUrl: string) {
-    this.redis = new Redis(redisUrl);
+    const AjvCtor: any = (AjvModule as any).default || AjvModule;
+    this.ajv = new AjvCtor({ allErrors: true, strict: false });
+    this.redis = new (Redis as any)(redisUrl);
   }
 
   async execute(def: ToolDefinition, args: Record<string, unknown>, idempotencyKey?: string): Promise<ToolResult> {

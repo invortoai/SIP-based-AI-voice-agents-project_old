@@ -12,8 +12,12 @@
     "lint": "echo no-lint",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
   "devDependencies": {
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "@invorto/shared": "*"
   },
   "peerDependencies": {
     "@invorto/shared": "*"

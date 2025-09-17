@@ -2,11 +2,12 @@ import Fastify from "fastify";
 import fastifyCors from "@fastify/cors";
 import { z } from "zod";
 import Redis from "ioredis";
+import type { Redis as RedisType } from "ioredis";
 import crypto from "node:crypto";
 import client from "prom-client";
 
 export const app = Fastify({ logger: true });
-const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
+const redis: RedisType = new (Redis as any)(process.env.REDIS_URL || "redis://localhost:6379");
 
 // Prometheus metrics
 const registry = new client.Registry();
@@ -168,7 +169,7 @@ async function cleanupStuckCalls(): Promise<void> {
       }
 
       // Check last activity by looking at events
-      const events = await redis.xrange(`events:${callId}`, "-", "+", "COUNT", 1);
+      const events = await redis.xrange(`events:${callId}`, "-", "+", "COUNT", 1) as Array<[string, string[]]>;
       if (events.length > 0) {
         const [, fields] = events[0];
         const event: Record<string, string> = {};
@@ -1017,7 +1018,7 @@ app.get("/call/:id", async (req, reply) => {
   
   try {
     // Get call events from timeline
-    const events = await redis.xrange(`events:${id}`, "-", "+", "COUNT", 100);
+    const events = await redis.xrange(`events:${id}`, "-", "+", "COUNT", 100) as Array<[string, string[]]>;
     
     const callInfo = {
       callId: id,
@@ -1236,7 +1237,7 @@ app.get("/calls/active", async (req, reply) => {
       const callId = key.replace("events:", "");
 
       // Get latest event to determine status
-      const latestEvents = await redis.xrevrange(key, "+", "-", "COUNT", 1);
+      const latestEvents = await redis.xrevrange(key, "+", "-", "COUNT", 1) as Array<[string, string[]]>;
       if (latestEvents.length > 0) {
         const [, fields] = latestEvents[0];
         const event: Record<string, string> = {};
