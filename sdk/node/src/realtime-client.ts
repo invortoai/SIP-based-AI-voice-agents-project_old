@@ -1,6 +1,6 @@
 import WebSocket from 'ws';
 import { EventEmitter } from 'events';
-import { RealtimeConnection, RealtimeOptions, RealtimeEvent } from './types';
+import { RealtimeConnection, RealtimeOptions, RealtimeEvent } from './types.js';
 import type { WsInbound, WsOutbound } from '@invorto/shared';
 import { z } from 'zod';
 

@@ -1,4 +1,5 @@
 import Redis from "ioredis";
+import type { Redis as RedisType } from "ioredis";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import {
   initializeObservability,
@@ -8,11 +9,11 @@ import {
   healthChecker,
   createSpan,
   recordException
-} from "@invorto/shared";
+} from "@invorto/shared/dist/observability.js";
 import {
   PIIRedactor,
   getSecret
-} from "@invorto/shared";
+} from "@invorto/shared/dist/security.js";
 
 // Initialize observability
 await initializeObservability({
@@ -28,9 +29,9 @@ const structuredLogger = new StructuredLogger("workers-service");
 const piiRedactor = new PIIRedactor();
 
 const redisUrl = await getSecret("REDIS_URL") || process.env.REDIS_URL || "redis://localhost:6379";
-const redis = new Redis(redisUrl);
+const redis: RedisType = new (Redis as any)(redisUrl);
 const s3 = new S3Client({});
-const redisQ = new Redis(redisUrl);
+const redisQ: RedisType = new (Redis as any)(redisUrl);
 
 async function main() {
   structuredLogger.info("Worker service starting");
@@ -73,7 +74,7 @@ async function main() {
       structuredLogger.debug("Heartbeat written", { timestamp: now });
     } catch (err) {
       recordException(err as Error, span);
-      structuredLogger.error("Failed to write heartbeat", { error: err });
+      structuredLogger.error("Failed to write heartbeat", err  as Error);
     } finally {
       span.end();
     }
@@ -139,11 +140,11 @@ async function main() {
           // DLQ on parse or network error
           await redisQ.lpush("webhooks:dlq", raw);
           customMetrics.incrementCounter("webhook_errors");
-          structuredLogger.error("Webhook processing error", { error: err });
+          structuredLogger.error("Webhook processing error", err  as Error);
         }
       } catch (err) {
         recordException(err as Error, workerSpan);
-        structuredLogger.error("Worker cycle error", { error: err });
+        structuredLogger.error("Worker cycle error", err  as Error);
         await new Promise(resolve => setTimeout(resolve, 1000));
       } finally {
         workerSpan.end();
@@ -188,7 +189,7 @@ async function main() {
         }
       } catch (err) {
         recordException(err as Error, workerSpan);
-        structuredLogger.error("Analytics worker error", { error: err });
+        structuredLogger.error("Analytics worker error", err  as Error);
         await new Promise(resolve => setTimeout(resolve, 1000));
       } finally {
         workerSpan.end();
@@ -234,7 +235,7 @@ async function main() {
           
         } catch (err) {
           recordException(err as Error, workerSpan);
-          const errorData = data as { callId?: string };
+          const errorData = {} as { callId?: string };
           structuredLogger.error("Transcription processing error", { error: err, callId: errorData?.callId });
 
           // Update status to failed
@@ -248,7 +249,7 @@ async function main() {
         }
       } catch (err) {
         recordException(err as Error, workerSpan);
-        structuredLogger.error("Transcription worker error", { error: err });
+        structuredLogger.error("Transcription worker error", err  as Error);
         await new Promise(resolve => setTimeout(resolve, 1000));
       } finally {
         workerSpan.end();
@@ -293,12 +294,12 @@ async function main() {
           
         } catch (err) {
           recordException(err as Error, workerSpan);
-          const errorData = data as { callId?: string };
+          const errorData = {} as { callId?: string };
           structuredLogger.error("Cost calculation error", { error: err, callId: errorData?.callId });
         }
       } catch (err) {
         recordException(err as Error, workerSpan);
-        structuredLogger.error("Cost calculation worker error", { error: err });
+        structuredLogger.error("Cost calculation worker error", err  as Error);
         await new Promise(resolve => setTimeout(resolve, 1000));
       } finally {
         workerSpan.end();
@@ -335,12 +336,12 @@ async function main() {
 
         } catch (err) {
           recordException(err as Error, workerSpan);
-          const errorData = data as { tenantId?: string };
+          const errorData = {} as { tenantId?: string };
           structuredLogger.error("Metrics aggregation error", { error: err, tenantId: errorData?.tenantId });
         }
       } catch (err) {
         recordException(err as Error, workerSpan);
-        structuredLogger.error("Metrics aggregation worker error", { error: err });
+        structuredLogger.error("Metrics aggregation worker error", err  as Error);
         await new Promise(resolve => setTimeout(resolve, 1000));
       } finally {
         workerSpan.end();
@@ -376,12 +377,11 @@ async function main() {
 
         } catch (err) {
           recordException(err as Error, workerSpan);
-          const errorData = data as { tenantId?: string };
-          structuredLogger.error("Compliance processing error", { error: err, tenantId: errorData?.tenantId });
+          structuredLogger.error("Compliance processing error", { error: err });
         }
       } catch (err) {
         recordException(err as Error, workerSpan);
-        structuredLogger.error("Compliance worker error", { error: err });
+        structuredLogger.error("Compliance worker error", err  as Error);
         await new Promise(resolve => setTimeout(resolve, 1000));
       } finally {
         workerSpan.end();
@@ -417,12 +417,12 @@ async function main() {
 
         } catch (err) {
           recordException(err as Error, workerSpan);
-          const errorData = data as { type?: string };
+          const errorData = {} as { type?: string };
           structuredLogger.error("Notification processing error", { error: err, type: errorData?.type });
         }
       } catch (err) {
         recordException(err as Error, workerSpan);
-        structuredLogger.error("Notification worker error", { error: err });
+        structuredLogger.error("Notification worker error", err  as Error);
         await new Promise(resolve => setTimeout(resolve, 1000));
       } finally {
         workerSpan.end();
@@ -469,12 +469,12 @@ async function main() {
 
         } catch (err) {
           recordException(err as Error, workerSpan);
-          const errorData = data as { callId?: string };
+          const errorData = {} as { callId?: string };
           structuredLogger.error("Quality monitoring error", { error: err, callId: errorData?.callId });
         }
       } catch (err) {
         recordException(err as Error, workerSpan);
-        structuredLogger.error("Quality monitoring worker error", { error: err });
+        structuredLogger.error("Quality monitoring worker error", err  as Error);
         await new Promise(resolve => setTimeout(resolve, 1000));
       } finally {
         workerSpan.end();

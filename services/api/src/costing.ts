@@ -1,5 +1,5 @@
 import { Client } from "pg";
-import Redis from "ioredis";
+import type { Redis as RedisType } from "ioredis";
 
 export interface CostingRates {
   asrPerMinute: number;
@@ -29,10 +29,10 @@ export interface CostBreakdown {
 
 export class CostingService {
   private pg: Client;
-  private redis: Redis;
+  private redis: RedisType;
   private rates: CostingRates;
 
-  constructor(pg: Client, redis: Redis) {
+  constructor(pg: Client, redis: RedisType) {
     this.pg = pg;
     this.redis = redis;
     

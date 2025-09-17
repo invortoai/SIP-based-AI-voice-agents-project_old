@@ -1,13 +1,13 @@
 import { EventEmitter } from 'events';
-import { DeepgramWsAsr } from '../adapters/asr/deepgram_ws';
-import { OpenAiClient } from '../adapters/llm/openai';
-import { DeepgramTtsClient } from '../adapters/tts/deepgram';
-import { TimelinePublisher } from '../timeline/redis';
-import { JitterBuffer } from './jitterBuffer';
-import { EnergyMeter } from './energyMeter';
-import { AudioAnalyzer } from './audioAnalyzer';
-import { AdvancedEndpointing, EndpointingConfig } from './endpointing';
-import { ToolRegistry } from '../tools/registry';
+import { DeepgramWsAsr } from '../adapters/asr/deepgram_ws.js';
+import { OpenAiClient } from '../adapters/llm/openai.js';
+import { DeepgramTtsClient } from '../adapters/tts/deepgram.js';
+import { TimelinePublisher } from '../timeline/redis.js';
+import { JitterBuffer } from './jitterBuffer.js';
+import { EnergyMeter } from './energyMeter.js';
+import { AudioAnalyzer } from './audioAnalyzer.js';
+import { AdvancedEndpointing, EndpointingConfig } from './endpointing.js';
+import { ToolRegistry } from '../tools/registry.js';
 import { WsOutbound } from '@invorto/shared';
 
 export enum ConversationState {
