@@ -498,3 +498,28 @@ variable "slack_webhook_url" {
   default     = ""
   sensitive   = true
 }
+
+# Telephony Service Variables
+variable "telephony_desired_count" {
+  description = "Desired number of telephony service tasks"
+  type        = number
+  default     = 2
+}
+
+variable "telephony_cpu" {
+  description = "CPU units for telephony service (1024 = 1 vCPU)"
+  type        = number
+  default     = 512
+}
+
+variable "telephony_memory" {
+  description = "Memory for telephony service in MB"
+  type        = number
+  default     = 1024
+}
+
+variable "domain" {
+  description = "Domain name for the application"
+  type        = string
+  default     = "api.invortoai.com"
+}
