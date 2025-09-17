@@ -3,9 +3,51 @@ import fastifyCors from "@fastify/cors";
 import { z } from "zod";
 import Redis from "ioredis";
 import crypto from "node:crypto";
+import client from "prom-client";
 
 export const app = Fastify({ logger: true });
 const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
+
+// Prometheus metrics
+const registry = new client.Registry();
+client.collectDefaultMetrics({ register: registry });
+
+// Custom metrics for telephony service
+const stuckCallsGauge = new client.Gauge({
+  name: "telephony_stuck_calls_total",
+  help: "Number of stuck calls detected",
+  registers: [registry]
+});
+
+const semaphoreLeaksCounter = new client.Counter({
+  name: "telephony_semaphore_leaks_total",
+  help: "Total number of semaphore leaks detected",
+  registers: [registry]
+});
+
+const activeSemaphoresGauge = new client.Gauge({
+  name: "telephony_active_semaphores",
+  help: "Number of active semaphores",
+  registers: [registry]
+});
+
+const maxSemaphoresGauge = new client.Gauge({
+  name: "telephony_max_semaphores",
+  help: "Maximum allowed semaphores",
+  registers: [registry]
+});
+
+const callTimeoutsCounter = new client.Counter({
+  name: "telephony_call_timeouts_total",
+  help: "Total number of call timeouts",
+  registers: [registry]
+});
+
+const blockedIPsGauge = new client.Gauge({
+  name: "telephony_blocked_ips_total",
+  help: "Number of currently blocked IPs",
+  registers: [registry]
+});
 
 // CORS: explicitly allow PUBLIC_BASE_URL origin if provided (single-domain)
 const allowedOrigin = (() => {
@@ -25,6 +67,12 @@ app.register(fastifyCors, {
 
 // Health
 app.get("/health", async () => ({ ok: true }));
+
+// Prometheus metrics endpoint
+app.get("/metrics", async (req, reply) => {
+  reply.header("content-type", registry.contentType);
+  return await registry.metrics();
+});
 
 // ---- Concurrency limits (Redis-backed semaphores) ----
 const PER_CAMPAIGN_MAX = parseInt(process.env.TELEPHONY_PER_CAMPAIGN_MAX_CONCURRENCY || "0"); // 0 = unlimited
@@ -92,6 +140,88 @@ async function releaseSemaphoresByCall(callId: string): Promise<void> {
   } catch {}
 }
 
+// Call timeout mechanism
+const CALL_TIMEOUT_MINUTES = parseInt(process.env.CALL_TIMEOUT_MINUTES || "30"); // 30 minutes default
+const CLEANUP_INTERVAL_MINUTES = parseInt(process.env.CLEANUP_INTERVAL_MINUTES || "5"); // Check every 5 minutes
+
+async function cleanupStuckCalls(): Promise<void> {
+  try {
+    const now = Date.now();
+    const timeoutMs = CALL_TIMEOUT_MINUTES * 60 * 1000;
+
+    // Get all active call tokens
+    const allTokens = await redis.smembers(GLOBAL_SET_KEY);
+    let cleanedCount = 0;
+    let stuckCount = 0;
+
+    for (const token of allTokens) {
+      const callId = token.replace('sem:', '');
+
+      // Check if call has timed out
+      const tokenExists = await redis.exists(`limits:token:${callId}`);
+      if (!tokenExists) {
+        // Token doesn't exist, clean up
+        await releaseSemaphoresByCall(callId);
+        cleanedCount++;
+        semaphoreLeaksCounter.inc();
+        continue;
+      }
+
+      // Check last activity by looking at events
+      const events = await redis.xrange(`events:${callId}`, "-", "+", "COUNT", 1);
+      if (events.length > 0) {
+        const [, fields] = events[0];
+        const event: Record<string, string> = {};
+        for (let i = 0; i < fields.length; i += 2) {
+          event[String(fields[i])] = String(fields[i + 1]);
+        }
+
+        const lastActivity = parseInt(event.timestamp || '0');
+        if (now - lastActivity > timeoutMs) {
+          app.log.warn({ callId, lastActivity: new Date(lastActivity).toISOString() }, "call timed out, cleaning up");
+
+          // Publish timeout event
+          await redis.xadd(
+            `events:${callId}`,
+            "*",
+            "kind", "call.timeout",
+            "payload", JSON.stringify({ reason: "no_activity", timeoutMinutes: CALL_TIMEOUT_MINUTES, at: now })
+          );
+
+          // Clean up resources
+          await releaseSemaphoresByCall(callId);
+          cleanedCount++;
+          callTimeoutsCounter.inc();
+        } else {
+          stuckCount++;
+        }
+      } else {
+        // No events found, clean up
+        await releaseSemaphoresByCall(callId);
+        cleanedCount++;
+        semaphoreLeaksCounter.inc();
+      }
+    }
+
+    // Update metrics
+    stuckCallsGauge.set(stuckCount);
+    activeSemaphoresGauge.set(allTokens.length);
+    maxSemaphoresGauge.set(GLOBAL_MAX > 0 ? GLOBAL_MAX : 1000); // Default high number if unlimited
+    blockedIPsGauge.set(blockedIPs.size);
+
+    if (cleanedCount > 0) {
+      app.log.info({ cleanedCount }, "cleaned up stuck calls");
+    }
+  } catch (error) {
+    app.log.error({ error }, "failed to cleanup stuck calls");
+  }
+}
+
+// Start cleanup interval (disabled in tests)
+if (!process.env.JEST_WORKER_ID && (process.env.NODE_ENV || "") !== "test") {
+  setInterval(cleanupStuckCalls, CLEANUP_INTERVAL_MINUTES * 60 * 1000);
+}
+
 // Limits metrics endpoint
 app.get("/telephony/limits", async () => {
   const globalCount = await redis.scard(GLOBAL_SET_KEY);
@@ -107,23 +237,191 @@ app.get("/telephony/limits", async () => {
   };
 });
 
-// Basic security: optional IP allowlist and shared token
+// Enhanced security: IP allowlist with CIDR support, rate limiting, and improved auth
+const suspiciousIPs = new Map<string, { count: number; firstSeen: number; lastSeen: number }>();
+const SUSPICIOUS_IP_THRESHOLD = 10; // requests per minute
+const SUSPICIOUS_IP_WINDOW = 60000; // 1 minute in ms
+const BLOCK_DURATION = 300000; // 5 minutes in ms
+// Circuit breaker for telephony service
+interface CircuitBreakerState {
+  state: 'closed' | 'open' | 'half-open';
+  failures: number;
+  lastFailureTime: number;
+  nextAttemptTime: number;
+}
+
+const circuitBreaker: CircuitBreakerState = {
+  state: 'closed',
+  failures: 0,
+  lastFailureTime: 0,
+  nextAttemptTime: 0
+};
+
+const CIRCUIT_BREAKER_FAILURE_THRESHOLD = parseInt(process.env.CIRCUIT_BREAKER_FAILURE_THRESHOLD || "5");
+const CIRCUIT_BREAKER_TIMEOUT_MS = parseInt(process.env.CIRCUIT_BREAKER_TIMEOUT_MS || "60000"); // 1 minute
+const CIRCUIT_BREAKER_SUCCESS_THRESHOLD = parseInt(process.env.CIRCUIT_BREAKER_SUCCESS_THRESHOLD || "3");
+
+function recordCircuitBreakerSuccess(): void {
+  if (circuitBreaker.state === 'half-open') {
+    circuitBreaker.failures = 0;
+    circuitBreaker.state = 'closed';
+    app.log.info("circuit breaker closed - service recovered");
+  }
+}
+
+function recordCircuitBreakerFailure(): void {
+  circuitBreaker.failures++;
+  circuitBreaker.lastFailureTime = Date.now();
+
+  if (circuitBreaker.state === 'closed' && circuitBreaker.failures >= CIRCUIT_BREAKER_FAILURE_THRESHOLD) {
+    circuitBreaker.state = 'open';
+    circuitBreaker.nextAttemptTime = Date.now() + CIRCUIT_BREAKER_TIMEOUT_MS;
+    app.log.warn({ failures: circuitBreaker.failures }, "circuit breaker opened");
+  } else if (circuitBreaker.state === 'half-open') {
+    circuitBreaker.state = 'open';
+    circuitBreaker.nextAttemptTime = Date.now() + CIRCUIT_BREAKER_TIMEOUT_MS;
+    app.log.warn("circuit breaker re-opened after half-open failure");
+  }
+}
+
+function isCircuitBreakerOpen(): boolean {
+  if (circuitBreaker.state === 'closed') {
+    return false;
+  }
+
+  if (circuitBreaker.state === 'open') {
+    const now = Date.now();
+    if (now >= circuitBreaker.nextAttemptTime) {
+      circuitBreaker.state = 'half-open';
+      app.log.info("circuit breaker half-open - testing service");
+      return false;
+    }
+    return true;
+  }
+
+  return false; // half-open allows requests
+}
+
+const blockedIPs = new Map<string, number>();
+
+function isIPInCIDR(ip: string, cidr: string): boolean {
+  try {
+    const [network, prefix] = cidr.split('/');
+    const prefixLen = parseInt(prefix);
+
+    // Simple IPv4 CIDR check (can be enhanced for IPv6)
+    if (ip.includes(':') || network.includes(':')) return false; // IPv6 not supported yet
+
+    const ipParts = ip.split('.').map(Number);
+    const networkParts = network.split('.').map(Number);
+
+    const mask = ~(0xffffffff >>> prefixLen);
+    const ipNum = (ipParts[0] << 24) | (ipParts[1] << 16) | (ipParts[2] << 8) | ipParts[3];
+    const networkNum = (networkParts[0] << 24) | (networkParts[1] << 16) | (networkParts[2] << 8) | networkParts[3];
+
+    return (ipNum & mask) === (networkNum & mask);
+  } catch {
+    return false;
+  }
+}
+
+function isAllowedIP(ip: string, allowedList: string[]): boolean {
+  if (!ip) return false;
+
+  for (const allowed of allowedList) {
+    if (allowed.includes('/')) {
+      // CIDR notation
+      if (isIPInCIDR(ip, allowed)) return true;
+    } else {
+      // Exact match
+      if (ip === allowed) return true;
+    }
+  }
+  return false;
+}
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const data = suspiciousIPs.get(ip);
+
+  if (!data) {
+    suspiciousIPs.set(ip, { count: 1, firstSeen: now, lastSeen: now });
+    return true;
+  }
+
+  // Reset counter if window has passed
+  if (now - data.firstSeen > SUSPICIOUS_IP_WINDOW) {
+    suspiciousIPs.set(ip, { count: 1, firstSeen: now, lastSeen: now });
+    return true;
+  }
+
+  data.count++;
+  data.lastSeen = now;
+
+  return data.count <= SUSPICIOUS_IP_THRESHOLD;
+}
+
+function isBlocked(ip: string): boolean {
+  const blockTime = blockedIPs.get(ip);
+  if (!blockTime) return false;
+
+  const now = Date.now();
+  if (now - blockTime > BLOCK_DURATION) {
+    blockedIPs.delete(ip);
+    return false;
+  }
+  return true;
+}
+
 app.addHook("onRequest", async (req, reply) => {
-  const allowed = (process.env.ALLOWED_JAMBONZ_IPS || "").split(",").map(s => s.trim()).filter(Boolean);
-  if (allowed.length > 0) {
-    const ip = req.ip;
-    if (!allowed.includes(ip)) {
-      req.log.warn({ ip }, "blocked ip for telephony webhook");
-      return reply.code(403).send({ code: "forbidden" });
-    }
+  const clientIP = req.ip || (req as any).raw?.connection?.remoteAddress || "unknown";
+
+  // Check circuit breaker first
+  if (isCircuitBreakerOpen()) {
+    req.log.warn({ ip: clientIP, circuitBreakerState: circuitBreaker.state }, "circuit breaker open - rejecting request");
+    return reply.code(503).send({
+      code: "service_unavailable",
+      message: "Service temporarily unavailable",
+      retryAfter: Math.ceil((circuitBreaker.nextAttemptTime - Date.now()) / 1000)
+    });
   }
-  const shared = process.env.TELEPHONY_SHARED_SECRET;
-  if (shared) {
+
+  // Check if IP is blocked
+  if (isBlocked(clientIP)) {
+    recordCircuitBreakerFailure();
+    req.log.warn({ ip: clientIP }, "blocked ip - rate limit exceeded");
+    return reply.code(429).send({ code: "rate_limit_exceeded", message: "Too many requests" });
+  }
+
+  // Rate limiting check
+  if (!checkRateLimit(clientIP)) {
+    blockedIPs.set(clientIP, Date.now());
+    recordCircuitBreakerFailure();
+    req.log.warn({ ip: clientIP }, "ip blocked due to rate limiting");
+    return reply.code(429).send({ code: "rate_limit_exceeded", message: "Too many requests" });
+  }
+
+  // IP allowlist check
+  const allowedIPs = (process.env.ALLOWED_JAMBONZ_IPS || "").split(",").map(s => s.trim()).filter(Boolean);
+  if (allowedIPs.length > 0 && !isAllowedIP(clientIP, allowedIPs)) {
+    recordCircuitBreakerFailure();
+    req.log.warn({ ip: clientIP, allowedIPs }, "ip not in allowlist");
+    return reply.code(403).send({ code: "forbidden", message: "IP not allowed" });
+  }
+
+  // Enhanced token validation
+  const sharedSecret = process.env.TELEPHONY_SHARED_SECRET;
+  if (sharedSecret) {
     const token = (req.headers["x-telephony-token"] || "").toString();
-    if (token !== shared) {
-      return reply.code(401).send({ code: "unauthorized" });
+    if (!token || token !== sharedSecret) {
+      recordCircuitBreakerFailure();
+      req.log.warn({ ip: clientIP, hasToken: !!token }, "invalid or missing auth token");
+      return reply.code(401).send({ code: "unauthorized", message: "Invalid authentication" });
     }
   }
+
+  // Log successful auth for monitoring
+  req.log.info({ ip: clientIP, path: req.url }, "request authorized");
 });
 
 // Jambonz webhook schemas
@@ -185,76 +483,221 @@ function connectToRealtime(callId: string, agentId?: string) {
   ];
 }
 
-// Incoming call webhook (generic)
+// Retry mechanism with exponential backoff
+async function retryWithBackoff<T>(
+  operation: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelay: number = 1000,
+  maxDelay: number = 10000
+): Promise<T> {
+  let lastError: Error;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error as Error;
+
+      if (attempt === maxRetries) {
+        break;
+      }
+
+      // Exponential backoff with jitter
+      const delay = Math.min(baseDelay * Math.pow(2, attempt), maxDelay);
+      const jitter = Math.random() * 0.1 * delay;
+      const finalDelay = delay + jitter;
+
+      await new Promise(resolve => setTimeout(resolve, finalDelay));
+    }
+  }
+
+  throw lastError!;
+}
+
+// Graceful degradation handler
+function handleGracefulDegradation(req: any, reply: any, error: Error, operation: string) {
+  req.log.error({ error, operation }, "operation failed, attempting graceful degradation");
+
+  // For call operations, we can return a basic response
+  if (operation === "call") {
+    return reply.code(503).send({
+      code: "service_degraded",
+      message: "Service temporarily degraded, call may not be fully functional",
+      degraded: true
+    });
+  }
+
+  // For status operations, we can still process but with reduced functionality
+  if (operation === "status") {
+    return reply.code(202).send({
+      code: "accepted_degraded",
+      message: "Status accepted but processing may be delayed",
+      degraded: true
+    });
+  }
+
+  // Default degraded response
+  return reply.code(503).send({
+    code: "service_unavailable",
+    message: "Service temporarily unavailable",
+    degraded: true
+  });
+}
+
+// Incoming call webhook (generic) with retry and circuit breaker
 app.post("/call", async (req, reply) => {
-  const body = callHookSchema.safeParse((req as any).body);
-  if (!body.success) {
-    return reply.code(400).send({ error: "bad_request" });
-  }
-  const raw = body.data;
-  const callId = raw.call_sid || `c_${Math.random().toString(36).slice(2)}`;
-  const campaignId = getCampaignId(req, raw);
+  try {
+    const body = callHookSchema.safeParse((req as any).body);
+    if (!body.success) {
+      recordCircuitBreakerFailure();
+      return reply.code(400).send({ error: "bad_request" });
+    }
+    const raw = body.data;
+    const callId = raw.call_sid || `c_${Math.random().toString(36).slice(2)}`;
+    const campaignId = getCampaignId(req, raw);
 
-  // Acquire concurrency slots
-  const acq = await acquireSemaphores(campaignId, callId);
-  if (!acq.ok) {
-    req.log.warn({ callId, campaignId, scope: acq.scope }, "concurrency limit exceeded");
-    return reply
-      .code(429)
-      .send({ code: "concurrency_limit", scope: acq.scope, limit: acq.limit, message: "Concurrency limit exceeded" });
-  }
+    // Acquire concurrency slots with retry
+    const acq = await retryWithBackoff(async () => {
+      const result = await acquireSemaphores(campaignId, callId);
+      if (!result.ok) {
+        throw new Error(`Concurrency limit exceeded: ${result.scope}`);
+      }
+      return result;
+    });
 
-  const agentId = (req.headers["x-agent-id"] as string) || undefined;
-  const appJson = connectToRealtime(callId, agentId);
-  return reply.send(appJson);
+    const agentId = (req.headers["x-agent-id"] as string) || undefined;
+    const appJson = connectToRealtime(callId, agentId);
+
+    recordCircuitBreakerSuccess();
+    return reply.send(appJson);
+
+  } catch (error) {
+    recordCircuitBreakerFailure();
+    return handleGracefulDegradation(req, reply, error as Error, "call");
+  }
 });
 
-// Call status webhook (generic)
-app.post("/status/:id", async (req) => {
+// Enhanced call status webhook with better error handling
+app.post("/status/:id", async (req, reply) => {
   const { id } = req.params as any;
   const body: any = (req as any).body || {};
   const status = body.call_status || body.status || "unknown";
-
-  // Map common statuses to timeline kinds
-  const kind =
-    status === "ringing" ? "call.ringing" :
-    status === "in-progress" || status === "answered" ? "call.answered" :
-    status === "completed" || status === "failed" || status === "no-answer" ? "call.ended" :
-    "call.status";
+  const callId = id;
 
   try {
+    // Validate call ID
+    if (!callId || typeof callId !== 'string') {
+      req.log.warn({ callId }, "invalid call ID in status webhook");
+      return { ok: false, error: "invalid_call_id" };
+    }
+
+    // Enhanced status mapping with better edge case handling
+    let kind: string;
+    let shouldReleaseSemaphore = false;
+
+    switch (status.toLowerCase()) {
+      case "ringing":
+        kind = "call.ringing";
+        break;
+      case "in-progress":
+      case "answered":
+        kind = "call.answered";
+        break;
+      case "completed":
+      case "failed":
+      case "no-answer":
+      case "busy":
+        kind = "call.ended";
+        shouldReleaseSemaphore = true;
+        break;
+      case "canceled":
+        kind = "call.canceled";
+        shouldReleaseSemaphore = true;
+        // Publish cancellation event for tracking
+        try {
+          await redis.xadd(
+            `events:${callId}`,
+            "*",
+            "kind", "call.canceled",
+            "payload", JSON.stringify({
+              reason: body.canceled_reason || "unknown",
+              at: Date.now(),
+              raw: body
+            })
+          );
+        } catch (error) {
+          req.log.error({ error, callId }, "failed to publish cancellation event");
+        }
+        break;
+      case "hangup":
+        kind = "call.hangup";
+        shouldReleaseSemaphore = true;
+        break;
+      default:
+        kind = "call.status";
+        // Check for late status updates that should trigger cleanup
+        if (body.duration && parseInt(body.duration) > CALL_TIMEOUT_MINUTES * 60) {
+          req.log.warn({ callId, status, duration: body.duration }, "late status update detected");
+          shouldReleaseSemaphore = true;
+        }
+    }
+
+    // Publish main status event
     await redis.xadd(
-      `events:${id}`,
+      `events:${callId}`,
       "*",
-      "kind",
-      kind,
-      "payload",
-      JSON.stringify({ raw: body })
+      "kind", kind,
+      "payload", JSON.stringify({
+        status,
+        timestamp: Date.now(),
+        raw: body
+      })
     );
-  } catch {}
 
-  // DTMF pass-through if present
-  if (body.dtmf || body.digit || body.digits) {
-    const digits = body.dtmf?.digits || body.digit || body.digits;
+    // Handle DTMF pass-through with validation
+    if (body.dtmf || body.digit || body.digits) {
+      const digits = body.dtmf?.digits || body.digit || body.digits;
+      if (digits && typeof digits === 'string') {
+        try {
+          await redis.xadd(
+            `events:${callId}`,
+            "*",
+            "kind", "dtmf.receive",
+            "payload", JSON.stringify({ digits, timestamp: Date.now() })
+          );
+        } catch (error) {
+          req.log.error({ error, callId }, "failed to publish DTMF event");
+        }
+      }
+    }
+
+    // Release concurrency when terminal or on late updates
+    if (shouldReleaseSemaphore || isTerminalStatus(status) || kind === "call.ended") {
+      try {
+        await releaseSemaphoresByCall(callId);
+        req.log.info({ callId, status }, "semaphore released");
+      } catch (error) {
+        req.log.error({ error, callId }, "failed to release semaphore");
+      }
+    }
+
+    recordCircuitBreakerSuccess();
+    req.log.info({ callId, status, kind }, "status processed successfully");
+    return { ok: true, status, kind };
+
+  } catch (error) {
+    recordCircuitBreakerFailure();
+    req.log.error({ error, callId, status }, "status webhook processing failed");
+
+    // Attempt cleanup on error
     try {
-      await redis.xadd(
-        `events:${id}`,
-        "*",
-        "kind",
-        "dtmf.receive",
-        "payload",
-        JSON.stringify({ digits })
-      );
-    } catch {}
-  }
+      await releaseSemaphoresByCall(callId);
+    } catch (cleanupError) {
+      req.log.error({ cleanupError, callId }, "cleanup failed after status error");
+    }
 
-  // Release concurrency when terminal
-  if (isTerminalStatus(status) || kind === "call.ended") {
-    await releaseSemaphoresByCall(id);
+    return handleGracefulDegradation(req, reply, error as Error, "status");
   }
-
-  req.log.info({ callId: id, status }, "status");
-  return { ok: true };
 });
 
 // ---- Jambonz integration (single-domain HTTPS webhooks) ----
@@ -788,10 +1231,10 @@ app.get("/calls/active", async (req, reply) => {
     // Get all call event streams
     const keys = await redis.keys("events:*");
     const activeCalls: Array<{ callId: string; lastEvent: string; lastEventTime: string | number | undefined }> = [];
-    
+
     for (const key of keys) {
       const callId = key.replace("events:", "");
-      
+
       // Get latest event to determine status
       const latestEvents = await redis.xrevrange(key, "+", "-", "COUNT", 1);
       if (latestEvents.length > 0) {
@@ -800,7 +1243,7 @@ app.get("/calls/active", async (req, reply) => {
         for (let i = 0; i < fields.length; i += 2) {
           event[String(fields[i])] = String(fields[i + 1]);
         }
-        
+
         const kind = event.kind;
         if (kind !== "call.ended" && kind !== "call.failed") {
           activeCalls.push({
@@ -811,7 +1254,7 @@ app.get("/calls/active", async (req, reply) => {
         }
       }
     }
-    
+
     return {
       activeCalls,
       count: activeCalls.length,
@@ -822,7 +1265,84 @@ app.get("/calls/active", async (req, reply) => {
   }
 });
 
-// Health check with Redis connectivity
+// Stuck calls detection endpoint
+app.get("/calls/stuck", async (req, reply) => {
+  try {
+    const now = Date.now();
+    const timeoutMs = CALL_TIMEOUT_MINUTES * 60 * 1000;
+    const stuckCalls: Array<{ callId: string; lastActivity: number; ageMinutes: number; reason: string }> = [];
+
+    // Check semaphore tokens
+    const allTokens = await redis.smembers(GLOBAL_SET_KEY);
+    for (const token of allTokens) {
+      const callId = token.replace('sem:', '');
+
+      // Check if token exists
+      const tokenExists = await redis.exists(`limits:token:${callId}`);
+      if (!tokenExists) {
+        stuckCalls.push({
+          callId,
+          lastActivity: 0,
+          ageMinutes: 0,
+          reason: "missing_token"
+        });
+        continue;
+      }
+
+      // Check last activity
+      const events = await redis.xrange(`events:${callId}`, "-", "+", "COUNT", 1);
+      if (events.length > 0) {
+        const [, fields] = events[0];
+        const event: Record<string, string> = {};
+        for (let i = 0; i < fields.length; i += 2) {
+          event[String(fields[i])] = String(fields[i + 1]);
+        }
+
+        const lastActivity = parseInt(event.timestamp || '0');
+        const ageMinutes = (now - lastActivity) / (60 * 1000);
+
+        if (now - lastActivity > timeoutMs) {
+          stuckCalls.push({
+            callId,
+            lastActivity,
+            ageMinutes: Math.round(ageMinutes),
+            reason: "timeout"
+          });
+        }
+      } else {
+        stuckCalls.push({
+          callId,
+          lastActivity: 0,
+          ageMinutes: 0,
+          reason: "no_events"
+        });
+      }
+    }
+
+    return {
+      stuckCalls,
+      count: stuckCalls.length,
+      timeoutMinutes: CALL_TIMEOUT_MINUTES,
+      timestamp: new Date().toISOString()
+    };
+  } catch (err) {
+    req.log.error({ err }, "failed to detect stuck calls");
+    return reply.code(500).send({ code: "internal_error" });
+  }
+});
+
+// Circuit breaker status endpoint
+app.get("/circuit-breaker/status", async (req) => {
+  return {
+    state: circuitBreaker.state,
+    failures: circuitBreaker.failures,
+    lastFailureTime: circuitBreaker.lastFailureTime ? new Date(circuitBreaker.lastFailureTime).toISOString() : null,
+    nextAttemptTime: circuitBreaker.nextAttemptTime ? new Date(circuitBreaker.nextAttemptTime).toISOString() : null,
+    timestamp: new Date().toISOString()
+  };
+});
+
+// Health check with Redis connectivity and circuit breaker status
 app.get("/health/detailed", async (req) => {
   try {
     // Check Redis connectivity
@@ -832,6 +1352,10 @@ app.get("/health/detailed", async (req) => {
       ok: true,
       service: "telephony",
       redis: "connected",
+      circuitBreaker: {
+        state: circuitBreaker.state,
+        failures: circuitBreaker.failures
+      },
       timestamp: new Date().toISOString(),
     };
   } catch (err) {
@@ -840,6 +1364,10 @@ app.get("/health/detailed", async (req) => {
       ok: false,
       service: "telephony",
       error: (err as Error).message,
+      circuitBreaker: {
+        state: circuitBreaker.state,
+        failures: circuitBreaker.failures
+      },
       timestamp: new Date().toISOString(),
     };
   }

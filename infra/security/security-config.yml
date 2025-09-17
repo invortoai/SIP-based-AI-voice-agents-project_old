@@ -14,7 +14,11 @@ network:
     - "192.168.0.0/16"
 
   telephony_allowlist:
-    - "0.0.0.0/0"       # Jambonz webhooks (use API key auth)
+    - "10.0.0.0/8"      # Internal network
+    - "172.16.0.0/12"   # Docker networks
+    - "192.168.0.0/16"  # Private networks
+    # Add specific Jambonz provider IPs here
+    # - "203.0.113.0/24"  # Example: Jambonz provider IP range
 
   # Rate limiting
   rate_limits:
