@@ -1,9 +1,11 @@
 # AWS Deployment Guide for Invorto Voice AI Platform
 
 ## Overview
+
 This guide provides step-by-step instructions for deploying the Invorto Voice AI Platform on AWS with enhanced security, monitoring, and reliability features.
 
 ## Architecture Overview
+
 - **ECS Fargate**: Containerized services with auto-scaling
 - **Application Load Balancer**: SSL termination and routing
 - **Redis ElastiCache**: Session storage and pub/sub
@@ -15,12 +17,14 @@ This guide provides step-by-step instructions for deploying the Invorto Voice AI
 ## Prerequisites
 
 ### AWS Resources Required
+
 - AWS Account with appropriate permissions
 - Domain name (e.g., `api.invortoai.com`)
 - SSL Certificate in AWS Certificate Manager
 - GitHub repository with deployment pipeline
 
 ### Local Development Setup
+
 ```bash
 # Install dependencies
 npm install
@@ -35,12 +39,14 @@ docker-compose up --build
 ## Step 1: Infrastructure Setup
 
 ### 1.1 Configure AWS CLI
+
 ```bash
 aws configure
 # Enter your AWS Access Key ID, Secret Access Key, and default region
 ```
 
 ### 1.2 Initialize Terraform
+
 ```bash
 cd infra/terraform
 
@@ -58,6 +64,7 @@ terraform apply -var-file="prod.tfvars"
 ```
 
 ### 1.3 Create Environment Variables File (`prod.tfvars`)
+
 ```hcl
 # Basic Configuration
 environment = "prod"
@@ -94,12 +101,14 @@ enable_cost_alerts = true
 ## Step 2: Build and Push Docker Images
 
 ### 2.1 Authenticate with ECR
+
 ```bash
 # Get ECR login token
 aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin YOUR_ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com
 ```
 
 ### 2.2 Build and Push Telephony Service
+
 ```bash
 # Build the telephony service
 cd services/telephony
@@ -113,6 +122,7 @@ docker push YOUR_ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com/prod-telephony:late
 ```
 
 ### 2.3 Build and Push Other Services
+
 ```bash
 # Repeat for other services
 cd ../realtime
@@ -129,6 +139,7 @@ docker push YOUR_ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com/prod-api:latest
 ## Step 3: Configure Secrets
 
 ### 3.1 Create Secrets in AWS Secrets Manager
+
 ```bash
 # Telephony Service Secrets
 aws secretsmanager create-secret \
@@ -154,6 +165,7 @@ aws secretsmanager create-secret \
 ## Step 4: Deploy Services
 
 ### 4.1 Update ECS Services
+
 ```bash
 # Update telephony service
 aws ecs update-service \
@@ -177,6 +189,7 @@ aws ecs update-service \
 ```
 
 ### 4.2 Verify Deployment
+
 ```bash
 # Check service status
 aws ecs describe-services \
@@ -195,6 +208,7 @@ aws elbv2 describe-target-groups \
 ## Step 5: Configure DNS
 
 ### 5.1 Update Route 53
+
 ```bash
 # Get ALB DNS name
 ALB_DNS=$(aws elbv2 describe-load-balancers \
@@ -224,6 +238,7 @@ aws route53 change-resource-record-sets \
 ## Step 6: Monitoring and Alerting
 
 ### 6.1 Verify CloudWatch Alarms
+
 ```bash
 # List all alarms
 aws cloudwatch describe-alarms \
@@ -241,6 +256,7 @@ aws cloudwatch get-metric-statistics \
 ```
 
 ### 6.2 Test Health Endpoints
+
 ```bash
 # Test telephony service health
 curl -f https://api.invortoai.com/health
@@ -261,6 +277,7 @@ curl -f https://api.invortoai.com/circuit-breaker/status
 ## Step 7: Security Configuration
 
 ### 7.1 Update WAF Rules
+
 ```bash
 # Get WAF ARN
 WAF_ARN=$(aws wafv2 list-web-acls \
@@ -278,6 +295,7 @@ aws wafv2 update-ip-set \
 ```
 
 ### 7.2 Configure Security Groups
+
 ```bash
 # Update ALB security group to allow HTTPS
 aws ec2 authorize-security-group-ingress \
@@ -290,6 +308,7 @@ aws ec2 authorize-security-group-ingress \
 ## Step 8: Backup and Recovery
 
 ### 8.1 Configure Automated Backups
+
 ```bash
 # Enable RDS automated backups
 aws rds modify-db-instance \
@@ -305,6 +324,7 @@ aws elasticache modify-replication-group \
 ```
 
 ### 8.2 Test Backup Recovery
+
 ```bash
 # Create manual snapshot
 aws rds create-db-snapshot \
@@ -318,6 +338,7 @@ aws s3 ls s3://prod-invorto-backups/ --recursive
 ## Step 9: Performance Optimization
 
 ### 9.1 Configure Auto Scaling
+
 ```bash
 # Create auto scaling policy for telephony service
 aws application-autoscaling put-scaling-policy \
@@ -337,6 +358,7 @@ aws application-autoscaling put-scaling-policy \
 ```
 
 ### 9.2 Optimize Redis Configuration
+
 ```bash
 # Update Redis parameters
 aws elasticache modify-cache-cluster \
@@ -348,6 +370,7 @@ aws elasticache modify-cache-cluster \
 ## Step 10: CI/CD Pipeline Setup
 
 ### 10.1 Configure CodePipeline
+
 ```bash
 # Create GitHub connection (if not already done)
 aws codestar-connections create-connection \
@@ -391,6 +414,7 @@ EOF
 ### Common Issues
 
 1. **Service fails to start**
+
    ```bash
    # Check CloudWatch logs
    aws logs tail /ecs/prod/telephony --follow
@@ -400,6 +424,7 @@ EOF
    ```
 
 2. **Circuit breaker activated**
+
    ```bash
    # Check circuit breaker status
    curl https://api.invortoai.com/circuit-breaker/status
@@ -409,6 +434,7 @@ EOF
    ```
 
 3. **High latency or errors**
+
    ```bash
    # Check ALB target health
    aws elbv2 describe-target-health --target-group-arn $TARGET_GROUP_ARN
@@ -435,12 +461,14 @@ EOF
 ## Maintenance
 
 ### Regular Tasks
+
 - **Weekly**: Review CloudWatch alarms and logs
 - **Monthly**: Update dependencies and security patches
 - **Quarterly**: Review and optimize costs
 - **Annually**: Update SSL certificates and security assessments
 
 ### Emergency Procedures
+
 1. **Service Outage**: Check ALB and ECS service status
 2. **Security Incident**: Isolate affected resources and investigate
 3. **Performance Issues**: Scale services or optimize configurations
