@@ -132,3 +132,40 @@ groups:
         annotations:
           summary: "Worker queue backlog"
           description: "Worker queue length is {{ $value }}, indicating processing delays."
+
+      # Stuck calls and resource leak alerts
+      - alert: StuckCallsDetected
+        expr: telephony_stuck_calls_total > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Stuck calls detected"
+          description: "{{ $value }} stuck calls detected, indicating potential resource leaks."
+
+      - alert: SemaphoreLeakDetected
+        expr: increase(telephony_semaphore_leaks_total[10m]) > 0
+        for: 5m
+        labels:
+          severity: error
+        annotations:
+          summary: "Semaphore leak detected"
+          description: "Semaphore leak detected, calls may be consuming resources without proper cleanup."
+
+      - alert: HighSemaphoreUsage
+        expr: (telephony_active_semaphores / telephony_max_semaphores) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High semaphore usage"
+          description: "Semaphore usage is {{ $value | printf \"%.1f\" }}%, approaching capacity limits."
+
+      - alert: CallTimeoutRateHigh
+        expr: rate(telephony_call_timeouts_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High call timeout rate"
+          description: "Call timeout rate is {{ $value | printf \"%.2f\" }} per minute, indicating call lifecycle issues."
