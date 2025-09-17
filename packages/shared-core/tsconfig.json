@@ -1,15 +1,12 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "outDir": "dist",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": [],
-    "baseUrl": ".",
-    "paths": {
-      "@invorto/shared-core": ["../../packages/shared-core/src/index.ts"]
-    }
+    "types": []
   },
   "include": ["src"]
 }

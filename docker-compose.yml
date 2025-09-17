@@ -19,7 +19,9 @@ services:
       - ./data/redis:/data
 
   telephony:
-    build: ./services/telephony
+    build:
+      context: .
+      dockerfile: services/telephony/Dockerfile
     environment:
       - REALTIME_WS_URL=http://localhost:8081/v1/realtime
       - PUBLIC_BASE_URL=http://localhost:8085

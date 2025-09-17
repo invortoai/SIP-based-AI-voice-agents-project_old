@@ -1,21 +1,31 @@
-FROM node:20-alpine AS base
-WORKDIR /app
+# Monorepo-aware Dockerfile using root context and npm workspaces
+# Build context must be repo root (configure in CI/compose)
+FROM node:20-alpine AS deps
+WORKDIR /workspace
 
-FROM base AS deps
-COPY package.json package-lock.json* ./
-COPY ../../package.json ../../package-lock.json* ./
-RUN npm ci --omit=dev || npm ci --omit=dev --workspaces=false
+# Copy root manifests and workspace package.json to allow a single npm ci
+COPY package.json package-lock.json ./
+COPY packages/*/package.json packages/*/
+COPY services/*/package.json services/*/
+COPY sdk/*/package.json sdk/*/
+RUN npm ci
 
-FROM base AS build
-COPY --from=deps /app /app
+# Build only this workspace to generate dist
+FROM deps AS build
 COPY . .
-RUN npm run build
+RUN npm run -w services/workers build
+# Prune dev deps for lean runtime
+RUN npm prune --omit=dev
 
+# Runtime image
 FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=build /app/dist ./dist
-COPY package.json ./
-RUN npm pkg set scripts.start="node dist/index.js"
-CMD ["npm", "start"]
+# Bring production node_modules from build stage (includes shared workspaces)
+COPY --from=build /workspace/node_modules ./node_modules
+# Copy built service files
+COPY --from=build /workspace/services/workers/dist ./dist
+# Copy service manifest
+COPY --from=build /workspace/services/workers/package.json ./package.json
+CMD ["node", "dist/index.js"]
 

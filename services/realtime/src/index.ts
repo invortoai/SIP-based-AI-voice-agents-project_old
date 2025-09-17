@@ -9,7 +9,7 @@ import { TimelinePublisher } from "./timeline/redis.js";
 import Redis from "ioredis";
 import { JitterBuffer } from "./runtime/jitterBuffer.js";
 import { EnergyMeter } from "./runtime/energyMeter.js";
-import { WsInbound, WsOutbound } from "@invorto/shared";
+import type { WsInbound, WsOutbound } from "@invorto/shared";
 // simplified runtime: remove external observability/security dependencies
 
 // observability removed for lean build

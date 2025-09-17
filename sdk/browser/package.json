@@ -16,10 +16,9 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "typescript": "^5.5.4",
-    "@invorto/shared": "*"
+    "typescript": "^5.5.4"
   },
   "peerDependencies": {
-    "@invorto/shared": "*"
+    "@invorto/shared-core": "*"
   }
 }
