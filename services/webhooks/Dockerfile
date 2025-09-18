@@ -8,7 +8,7 @@ COPY package.json package-lock.json ./
 COPY packages/*/package.json packages/*/
 COPY services/*/package.json services/*/
 COPY sdk/*/package.json sdk/*/
-RUN npm ci
+RUN npm ci || npm install
 
 # Build only this workspace to generate dist
 FROM deps AS build

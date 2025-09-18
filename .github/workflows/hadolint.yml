@@ -36,5 +36,5 @@ jobs:
         run: |
           while IFS= read -r f; do
             echo "Linting $f"
-            hadolint "$f"
+            hadolint --failure-threshold error "$f"
           done < dockerfiles.txt

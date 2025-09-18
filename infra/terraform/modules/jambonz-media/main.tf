@@ -199,7 +199,7 @@ resource "aws_autoscaling_group" "jambonz" {
   min_size            = var.min_size
   target_group_arns   = var.target_group_arns
   vpc_zone_identifier = var.private_subnets
-  health_check_grace_period = 300
+  
   health_check_type         = "ELB"
 
   launch_template {
