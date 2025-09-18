@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 import { DeepgramWsAsr } from '../adapters/asr/deepgram_ws.js';
 import { OpenAiClient } from '../adapters/llm/openai.js';
 import { DeepgramTtsClient } from '../adapters/tts/deepgram.js';
+ // ElevenLabs TTS imported dynamically
 import { TimelinePublisher } from '../timeline/redis.js';
 import { JitterBuffer } from './jitterBuffer.js';
 import { EnergyMeter } from './energyMeter.js';
@@ -9,6 +10,13 @@ import { AudioAnalyzer } from './audioAnalyzer.js';
 import { AdvancedEndpointing, EndpointingConfig } from './endpointing.js';
 import { ToolRegistry } from '../tools/registry.js';
 import type { WsOutbound } from '@invorto/shared';
+
+interface TtsAdapter {
+  onChunk(cb: (chunk: Uint8Array) => void): void;
+  onComplete(cb: (duration: number) => void): void;
+  interrupt(): void;
+  synthesize(text: string): Promise<void>;
+}
 
 export enum ConversationState {
   IDLE = 'idle',
@@ -41,6 +49,8 @@ export interface AgentConfig {
   agentId?: string;
   prompt?: string;
   voice?: string;
+  ttsProvider?: 'deepgram' | 'elevenlabs';
+  ttsModel?: string;
   locale?: string;
   temperature?: number;
   maxTokens?: number;
@@ -67,7 +77,7 @@ export class AgentRuntime extends EventEmitter {
 
   private asrAdapter: DeepgramWsAsr | null = null;
   private llmAdapter: OpenAiClient | null = null;
-  private ttsAdapter: DeepgramTtsClient | null = null;
+  private ttsAdapter: TtsAdapter | null = null;
 
   private jitterBuffer: JitterBuffer;
   private energyMeter: EnergyMeter;
@@ -211,13 +221,26 @@ export class AgentRuntime extends EventEmitter {
       // Make sure to seed system prompt
       await this.llmAdapter.start(this.config.prompt);
 
-      // TTS (Deepgram Aura streaming)
-      this.ttsAdapter = new DeepgramTtsClient({
-        apiKey: this.config.ttsApiKey,
-        voiceId: this.config.voice || 'aura-asteria-en',
-        sampleRate: 16000,
-        encoding: 'linear16'
-      });
+      // TTS provider selection
+      const ttsProvider = (this.config.ttsProvider || 'deepgram').toLowerCase();
+      if (ttsProvider === 'elevenlabs') {
+        const mod = await import('../adapters/tts/elevenlabs.js');
+        this.ttsAdapter = new mod.ElevenLabsTtsClient({
+          apiKey: this.config.ttsApiKey,
+          voiceId: this.config.voice || process.env.ELEVENLABS_VOICE_ID || 'Rachel',
+          modelId: this.config.ttsModel || process.env.ELEVENLABS_MODEL_ID || 'eleven_multilingual_v2',
+          sampleRate: 16000,
+          format: 'pcm_16000'
+        });
+      } else {
+        // Default Deepgram
+        this.ttsAdapter = new DeepgramTtsClient({
+          apiKey: this.config.ttsApiKey,
+          voiceId: this.config.voice || 'aura-asteria-en',
+          sampleRate: 16000,
+          encoding: 'linear16'
+        });
+      }
 
       // Tool registry (optional)
       const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
