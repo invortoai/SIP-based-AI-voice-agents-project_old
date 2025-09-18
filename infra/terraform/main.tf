@@ -43,7 +43,7 @@ provider "aws" {
 
 # VPC and Networking
 module "vpc" {
-  source = "../modules/vpc"
+  source = "./modules/vpc"
   
   environment = var.environment
   vpc_cidr   = var.vpc_cidr
@@ -52,7 +52,7 @@ module "vpc" {
 
 # ECS Cluster for Realtime WS + API + Webhooks + Workers
 module "ecs_cluster" {
-  source = "../modules/ecs-cluster"
+  source = "./modules/ecs-cluster"
   
   environment     = var.environment
   vpc_id         = module.vpc.vpc_id
@@ -62,7 +62,7 @@ module "ecs_cluster" {
 
 # Jambonz Media Gateway (EC2 ASG)
 module "jambonz_media" {
-  source = "../modules/jambonz-media"
+  source = "./modules/jambonz-media"
   
   environment     = var.environment
   vpc_id         = module.vpc.vpc_id
@@ -89,7 +89,7 @@ module "jambonz_media" {
 
 # Application Load Balancer (WS upgrade + WAF)
 module "alb" {
-  source = "../modules/alb"
+  source = "./modules/alb"
   
   environment     = var.environment
   vpc_id         = module.vpc.vpc_id
@@ -99,7 +99,7 @@ module "alb" {
 
 # Redis ElastiCache
 module "redis" {
-  source = "../modules/redis"
+  source = "./modules/redis"
   
   environment     = var.environment
   vpc_id         = module.vpc.vpc_id
@@ -109,7 +109,7 @@ module "redis" {
 
 # S3 Buckets for recordings, transcripts, metrics
 module "s3" {
-  source = "../modules/s3"
+  source = "./modules/s3"
 
   environment = var.environment
   bucket_prefix = "invorto"
@@ -258,14 +258,14 @@ resource "aws_iam_role_policy" "telephony_task_policy" {
 
 # Secrets Manager for provider keys, HMAC, JWT
 module "secrets" {
-  source = "../modules/secrets"
+  source = "./modules/secrets"
   
   environment = var.environment
 }
 
 # WAF rules (rate-limit, IP allowlists)
 module "waf" {
-  source = "../modules/waf"
+  source = "./modules/waf"
 
   environment     = var.environment
   aws_region      = var.aws_region
@@ -283,7 +283,7 @@ module "waf" {
 
 # CloudWatch alarms and dashboards
 module "monitoring" {
-  source = "../modules/monitoring"
+  source = "./modules/monitoring"
   
   environment = var.environment
   aws_region = var.aws_region
@@ -300,7 +300,7 @@ module "monitoring" {
 
 # CI/CD Pipeline Infrastructure
 module "ci_cd" {
-  source = "../modules/ci-cd"
+  source = "./modules/ci-cd"
   
   environment = var.environment
   aws_region = var.aws_region
@@ -318,7 +318,7 @@ module "ci_cd" {
 
 # Backup and Disaster Recovery
 module "backup_dr" {
-  source = "../modules/backup-dr"
+  source = "./modules/backup-dr"
   
   environment = var.environment
   aws_region = var.aws_region
@@ -337,7 +337,7 @@ module "backup_dr" {
 
 # Cost Management and Budget Controls
 module "cost_management" {
-  source = "../modules/cost-management"
+  source = "./modules/cost-management"
   
   environment = var.environment
   aws_region = var.aws_region
@@ -360,7 +360,7 @@ module "cost_management" {
 
 # Service Mesh (Istio)
 module "service_mesh" {
-  source = "../modules/service-mesh"
+  source = "./modules/service-mesh"
 
   cluster_name = module.eks.cluster_name
   enable_istio = var.enable_service_mesh
@@ -381,7 +381,7 @@ module "service_mesh" {
 
 # Monitoring Exporters (PostgreSQL, Redis, Node, Application metrics)
 module "monitoring_exporters" {
-  source = "../modules/monitoring-exporters"
+  source = "./modules/monitoring-exporters"
 
   environment     = var.environment
   aws_region      = var.aws_region

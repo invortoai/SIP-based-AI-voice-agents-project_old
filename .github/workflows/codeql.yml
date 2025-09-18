@@ -34,7 +34,7 @@ jobs:
           queries: security-extended,security-and-quality
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci || npm install
 
       - name: Build workspaces
         run: npm run -ws --if-present build

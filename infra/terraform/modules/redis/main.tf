@@ -6,8 +6,20 @@ variable "node_type" { type = string }
 resource "aws_security_group" "redis" {
   name_prefix = "${var.environment}-redis-"
   vpc_id      = var.vpc_id
-  ingress { protocol = "tcp" from_port = 6379 to_port = 6379 cidr_blocks = ["10.0.0.0/8"] }
-  egress  { protocol = "-1" from_port = 0 to_port = 0 cidr_blocks = ["0.0.0.0/0"] }
+
+  ingress {
+    protocol    = "tcp"
+    from_port   = 6379
+    to_port     = 6379
+    cidr_blocks = ["10.0.0.0/8"]
+  }
+
+  egress {
+    protocol    = "-1"
+    from_port   = 0
+    to_port     = 0
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 }
 
 resource "aws_elasticache_subnet_group" "this" {

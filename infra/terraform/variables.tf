@@ -480,11 +480,6 @@ variable "enable_email_alerts" {
   default     = false
 }
 
-variable "alert_email" {
-  description = "Email address for monitoring alerts"
-  type        = string
-  default     = ""
-}
 
 variable "enable_slack_alerts" {
   description = "Enable Slack alerts via SNS"
@@ -492,12 +487,6 @@ variable "enable_slack_alerts" {
   default     = false
 }
 
-variable "slack_webhook_url" {
-  description = "Slack webhook URL for monitoring alerts"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
 
 # Telephony Service Variables
 variable "telephony_desired_count" {
