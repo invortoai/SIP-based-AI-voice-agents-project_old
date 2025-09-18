@@ -45,7 +45,7 @@ if (process.env.NODE_ENV === 'production') {
     new CloudWatchTransport({
       logGroupName: `/aws/ecs/${process.env.SERVICE_NAME}`,
       logStreamName: process.env.HOSTNAME || 'default',
-      awsRegion: process.env.AWS_REGION || 'us-east-1',
+      awsRegion: process.env.AWS_REGION || 'ap-south-1',
       messageFormatter: (item: any) => JSON.stringify(item),
     })
   );

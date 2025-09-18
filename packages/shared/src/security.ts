@@ -5,7 +5,7 @@ import ipRangeCheck from 'ip-range-check';
 
 // AWS Secrets Manager client
 const secretsClient = new SecretsManagerClient({
-  region: process.env.AWS_REGION || 'us-east-1',
+  region: process.env.AWS_REGION || 'ap-south-1',
 });
 
 // Cache for secrets to avoid repeated API calls
