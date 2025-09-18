@@ -366,11 +366,27 @@ function handleRealtimeWs(socket: any, req: any, callId: string, agentId?: strin
     }
   };
 
+  // TTS provider selection (env-driven)
+  const TTS_PROVIDER = (process.env.TTS_PROVIDER || "deepgram").toLowerCase();
+  const TTS_API_KEY =
+    TTS_PROVIDER === "elevenlabs"
+      ? (process.env.ELEVENLABS_API_KEY || "")
+      : (process.env.DEEPGRAM_API_KEY || "");
+  const TTS_MODEL =
+    process.env.TTS_MODEL ||
+    (TTS_PROVIDER === "elevenlabs" ? (process.env.ELEVENLABS_MODEL_ID || undefined) : undefined);
+  const TTS_VOICE =
+    process.env.TTS_VOICE ||
+    (TTS_PROVIDER === "elevenlabs" ? (process.env.ELEVENLABS_VOICE_ID || undefined) : undefined);
+
   const runtime = new AgentRuntime(
     {
       asrApiKey: process.env.DEEPGRAM_API_KEY || "",
       openaiApiKey: process.env.OPENAI_API_KEY || "",
-      ttsApiKey: process.env.DEEPGRAM_API_KEY || "",
+      ttsApiKey: TTS_API_KEY,
+      ttsProvider: TTS_PROVIDER as 'deepgram' | 'elevenlabs',
+      voice: (TTS_VOICE || undefined) as any,
+      ttsModel: (TTS_MODEL || undefined) as any,
       endpointing: { provider: "invorto", silenceMs: 220, minWords: 2 },
     },
     (msg) => sendAndMirror(msg),
