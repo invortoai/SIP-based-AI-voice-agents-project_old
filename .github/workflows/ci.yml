@@ -14,7 +14,7 @@ permissions:
 
 env:
   NODE_VERSION: '20'
-  AWS_REGION: 'us-east-1'
+  AWS_REGION: 'ap-south-1'
   ECR_REPOSITORY_PREFIX: 'invorto'
 
 jobs:
