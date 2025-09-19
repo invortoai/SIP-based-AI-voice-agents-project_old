@@ -11,7 +11,7 @@ locals {
 
 # AWS Backup Vault
 resource "aws_backup_vault" "main" {
-  name = "$${local.name_prefix}-vault"
+  name = "${local.name_prefix}-vault"
   
   tags = local.tags
 }
@@ -26,7 +26,7 @@ resource "aws_backup_vault_lock_configuration" "main" {
 
 # AWS Backup Plan
 resource "aws_backup_plan" "main" {
-  name = "$${local.name_prefix}-plan"
+  name = "${local.name_prefix}-plan"
 
   rule {
     rule_name         = "daily_backup"
@@ -102,7 +102,7 @@ resource "aws_backup_selection" "ecs" {
 
 # AWS Backup Selection for RDS Resources
 resource "aws_backup_selection" "rds" {
-  name         = "$${local.name_prefix}-rds-selection"
+  name         = "${local.name_prefix}-rds-selection"
   iam_role_arn = aws_iam_role.backup.arn
   plan_id      = aws_backup_plan.main.id
 
@@ -115,7 +115,7 @@ resource "aws_backup_selection" "rds" {
 
 # AWS Backup Selection for EFS Resources
 resource "aws_backup_selection" "efs" {
-  name         = "$${local.name_prefix}-efs-selection"
+  name         = "${local.name_prefix}-efs-selection"
   iam_role_arn = aws_iam_role.backup.arn
   plan_id      = aws_backup_plan.main.id
 
@@ -128,7 +128,7 @@ resource "aws_backup_selection" "efs" {
 
 # IAM Role for AWS Backup
 resource "aws_iam_role" "backup" {
-  name = "$${local.name_prefix}-backup-role"
+  name = "${local.name_prefix}-backup-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -160,7 +160,7 @@ resource "aws_iam_role_policy_attachment" "backup_restore" {
 
 # S3 Bucket for Application Data Backup
 resource "aws_s3_bucket" "application_backup" {
-  bucket = "$${local.name_prefix}-app-data-$${random_string.bucket_suffix.result}"
+  bucket = "${local.name_prefix}-app-data-${random_string.bucket_suffix.result}"
   
   tags = local.tags
 }
@@ -227,7 +227,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "application_backup" {
 
 # S3 Bucket for Configuration Backup
 resource "aws_s3_bucket" "config_backup" {
-  bucket = "$${local.name_prefix}-config-$${random_string.bucket_suffix.result}"
+  bucket = "${local.name_prefix}-config-${random_string.bucket_suffix.result}"
   
   tags = local.tags
 }
@@ -307,7 +307,7 @@ resource "aws_s3_bucket" "dr_application_backup" {
   count = var.enable_cross_region_backup ? 1 : 0
   
   provider = aws.dr_region
-  bucket   = "$${local.name_prefix}-dr-app-data-$${random_string.bucket_suffix.result}"
+  bucket   = "${local.name_prefix}-dr-app-data-${random_string.bucket_suffix.result}"
   
   tags = merge(local.tags, {
     Purpose = "disaster-recovery"
@@ -344,7 +344,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "dr_application_ba
 resource "aws_iam_role" "replication" {
   count = var.enable_cross_region_backup ? 1 : 0
   
-  name = "$${local.name_prefix}-replication-role"
+  name = "${local.name_prefix}-replication-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -366,7 +366,7 @@ resource "aws_iam_role" "replication" {
 resource "aws_iam_role_policy" "replication" {
   count = var.enable_cross_region_backup ? 1 : 0
   
-  name = "$${local.name_prefix}-replication-policy"
+  name = "${local.name_prefix}-replication-policy"
   role = aws_iam_role.replication[0].id
 
   policy = jsonencode({
@@ -488,7 +488,7 @@ resource "aws_cloudwatch_dashboard" "backup" {
 
 # CloudWatch Alarms for Backup Monitoring
 resource "aws_cloudwatch_metric_alarm" "backup_failures" {
-  alarm_name          = "$${local.name_prefix}-backup-failures"
+  alarm_name          = "${local.name_prefix}-backup-failures"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = "1"
   metric_name         = "JobsFailed"
@@ -508,7 +508,7 @@ resource "aws_cloudwatch_metric_alarm" "backup_failures" {
 
 # CloudWatch Alarm for Recovery Points
 resource "aws_cloudwatch_metric_alarm" "recovery_points" {
-  alarm_name          = "$${local.name_prefix}-recovery-points"
+  alarm_name          = "${local.name_prefix}-recovery-points"
   comparison_operator = "LessThanThreshold"
   evaluation_periods  = "1"
   metric_name         = "RecoveryPoints"
