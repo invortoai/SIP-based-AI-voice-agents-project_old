@@ -74,6 +74,7 @@ module "jambonz_media" {
   redis_url           = "redis://$${module.redis.endpoint}:6379"
   db_url              = "postgresql://$${var.db_username}:$${var.db_password}@$${aws_db_instance.main.endpoint}:5432/$${var.db_name}"
   secrets_arn         = module.secrets.secret_arns.jambonz
+  jwt_secret_arn      = module.secrets.secret_arns.jwt
   sip_allowed_cidrs   = var.jambonz_sip_allowed_cidrs
   admin_allowed_cidrs = var.jambonz_admin_allowed_cidrs
   tags = {

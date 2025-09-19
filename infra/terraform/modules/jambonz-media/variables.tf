@@ -82,6 +82,11 @@ variable "secrets_arn" {
   type        = string
 }
 
+variable "jwt_secret_arn" {
+  description = "ARN of Secrets Manager secret containing JWT secret"
+  type        = string
+}
+
 variable "sip_allowed_cidrs" {
   description = "CIDR blocks allowed for SIP traffic"
   type        = list(string)
