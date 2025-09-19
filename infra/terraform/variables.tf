@@ -364,7 +364,7 @@ variable "github_connection_arn" {
 variable "github_repository" {
   description = "GitHub repository in format owner/repo"
   type        = string
-  default     = "invorto/voice-ai-platform"
+  default     = "invortoai/SIP-based-AI-voice-agents-project_old"
 }
 
 variable "github_branch" {
