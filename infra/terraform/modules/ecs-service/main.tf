@@ -13,12 +13,30 @@ variable "log_group" { type = string }
 
 resource "aws_iam_role" "task_role" {
   name               = "${var.service_name}-task-role"
-  assume_role_policy = jsonencode({ Version = "2012-10-17", Statement = [{ Effect = "Allow", Principal = { Service = "ecs-tasks.amazonaws.com" }, Action = "sts:AssumeRole" }] })
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "ecs-tasks.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
 }
 
 resource "aws_iam_role" "execution_role" {
   name               = "${var.service_name}-exec-role"
-  assume_role_policy = jsonencode({ Version = "2012-10-17", Statement = [{ Effect = "Allow", Principal = { Service = "ecs-tasks.amazonaws.com" }, Action = "sts:AssumeRole" }] })
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "ecs-tasks.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
 }
 
 resource "aws_iam_role_policy_attachment" "exec_attach" {
@@ -40,8 +58,18 @@ resource "aws_ecs_task_definition" "task" {
       name      = var.container_name,
       image     = var.image,
       essential = true,
-      portMappings = [{ containerPort = var.container_port, protocol = "tcp" }],
-      logConfiguration = { logDriver = "awslogs", options = { awslogs-group = var.log_group, awslogs-region = "ap-south-1", awslogs-stream-prefix = var.service_name } }
+      portMappings = [{
+        containerPort = var.container_port
+        protocol      = "tcp"
+      }]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = var.log_group
+          awslogs-region        = "ap-south-1"
+          awslogs-stream-prefix = var.service_name
+        }
+      }
     }
   ])
 }
