@@ -145,6 +145,8 @@ jobs:
         working-directory: infra/terraform
         run: |
           terraform plan -no-color -out=tfplan \
+            -var="environment=dev" \
+            -var="domain_name=api.invortoai.com" \
             -var="deepgram_api_key=${{ secrets.DEEPGRAM_API_KEY }}" \
             -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}" \
             -var="jwt_secret=${{ secrets.JWT_SECRET }}" \
@@ -409,6 +411,7 @@ jobs:
         with:
           soft_fail: false
           working_directory: infra/terraform
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Semgrep (SAST)
         uses: returntocorp/semgrep-action@v1
