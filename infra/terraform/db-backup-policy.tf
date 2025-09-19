@@ -1,12 +1,12 @@
 # Database Backup and Retention Policies
 
 resource "aws_backup_vault" "db_backup_vault" {
-  name        = "${var.project_name}-db-backup-vault-${var.environment}"
+  name        = "$${var.project_name}-db-backup-vault-$${var.environment}"
   kms_key_arn = aws_kms_key.db_backup_key.arn
 }
 
 resource "aws_backup_selection" "db_backup_selection" {
-  name         = "${var.project_name}-db-backup-selection-${var.environment}"
+  name         = "$${var.project_name}-db-backup-selection-$${var.environment}"
   plan_id      = aws_backup_plan.db_backup_plan.id
   iam_role_arn = aws_iam_role.backup_role.arn
 
@@ -16,7 +16,7 @@ resource "aws_backup_selection" "db_backup_selection" {
 }
 
 resource "aws_backup_plan" "db_backup_plan" {
-  name = "${var.project_name}-db-backup-plan-${var.environment}"
+  name = "$${var.project_name}-db-backup-plan-$${var.environment}"
 
   rule {
     rule_name         = "DailyBackups"

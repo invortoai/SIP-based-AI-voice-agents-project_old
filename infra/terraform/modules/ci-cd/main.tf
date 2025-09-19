@@ -11,7 +11,7 @@ locals {
 
 # S3 Bucket for Pipeline Artifacts
 resource "aws_s3_bucket" "pipeline_artifacts" {
-  bucket = "${local.name_prefix}-artifacts-${random_string.bucket_suffix.result}"
+  bucket = "$${local.name_prefix}-artifacts-$${random_string.bucket_suffix.result}"
   
   tags = local.tags
 }
@@ -63,7 +63,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "pipeline_artifacts" {
 
 # IAM Role for CodePipeline
 resource "aws_iam_role" "codepipeline" {
-  name = "${local.name_prefix}-codepipeline-role"
+  name = "$${local.name_prefix}-codepipeline-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -83,7 +83,7 @@ resource "aws_iam_role" "codepipeline" {
 
 # IAM Policy for CodePipeline
 resource "aws_iam_role_policy" "codepipeline" {
-  name = "${local.name_prefix}-codepipeline-policy"
+  name = "$${local.name_prefix}-codepipeline-policy"
   role = aws_iam_role.codepipeline.id
 
   policy = jsonencode({
@@ -135,7 +135,7 @@ resource "aws_iam_role_policy" "codepipeline" {
 
 # IAM Role for CodeBuild
 resource "aws_iam_role" "codebuild" {
-  name = "${local.name_prefix}-codebuild-role"
+  name = "$${local.name_prefix}-codebuild-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -155,7 +155,7 @@ resource "aws_iam_role" "codebuild" {
 
 # IAM Policy for CodeBuild
 resource "aws_iam_role_policy" "codebuild" {
-  name = "${local.name_prefix}-codebuild-policy"
+  name = "$${local.name_prefix}-codebuild-policy"
   role = aws_iam_role.codebuild.id
 
   policy = jsonencode({
@@ -189,7 +189,7 @@ resource "aws_iam_role_policy" "codebuild" {
         ]
         Resource = [
           aws_s3_bucket.pipeline_artifacts.arn,
-          "${aws_s3_bucket.pipeline_artifacts.arn}/*"
+          "$${aws_s3_bucket.pipeline_artifacts.arn}/*"
         ]
       }
     ]
@@ -248,8 +248,8 @@ resource "aws_codebuild_project" "build_services" {
             "echo Logging in to Amazon ECR...",
             "aws --version",
             "aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com",
-            "REPOSITORY_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com",
-            "COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)",
+            "REPOSITORY_URI=$$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com",
+            "COMMIT_HASH=$$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)",
             "IMAGE_TAG=$${COMMIT_HASH:-latest}"
           ]
         }
@@ -296,7 +296,7 @@ resource "aws_codebuild_project" "build_services" {
 
 # CodeBuild Project for Testing
 resource "aws_codebuild_project" "test_services" {
-  name          = "${local.name_prefix}-test-services"
+  name          = "$${local.name_prefix}-test-services"
   description   = "Run tests for Invorto platform services"
   build_timeout = "30"
   service_role  = aws_iam_role.codebuild.arn
@@ -371,7 +371,7 @@ resource "aws_codebuild_project" "test_services" {
 
 # CodeBuild Project for Security Scanning
 resource "aws_codebuild_project" "security_scan" {
-  name          = "${local.name_prefix}-security-scan"
+  name          = "$${local.name_prefix}-security-scan"
   description   = "Run security scans for Invorto platform"
   build_timeout = "20"
   service_role  = aws_iam_role.codebuild.arn
@@ -446,7 +446,7 @@ resource "aws_codebuild_project" "security_scan" {
 
 # CodePipeline for Main Deployment
 resource "aws_codepipeline" "main" {
-  name     = "${local.name_prefix}-main-pipeline"
+  name     = "$${local.name_prefix}-main-pipeline"
   role_arn = aws_iam_role.codepipeline.arn
 
   artifact_store {
@@ -630,7 +630,7 @@ resource "aws_iam_openid_connect_provider" "github" {
 
 # IAM Role for GitHub Actions
 resource "aws_iam_role" "github_actions" {
-  name = "${local.name_prefix}-github-actions-role"
+  name = "$${local.name_prefix}-github-actions-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -658,7 +658,7 @@ resource "aws_iam_role" "github_actions" {
 
 # IAM Policy for GitHub Actions
 resource "aws_iam_role_policy" "github_actions" {
-  name = "${local.name_prefix}-github-actions-policy"
+  name = "$${local.name_prefix}-github-actions-policy"
   role = aws_iam_role.github_actions.id
 
   policy = jsonencode({
@@ -701,7 +701,7 @@ resource "aws_iam_role_policy" "github_actions" {
 
 # SNS Topic for Pipeline Notifications
 resource "aws_sns_topic" "pipeline_notifications" {
-  name = "${local.name_prefix}-notifications"
+  name = "$${local.name_prefix}-notifications"
   
   tags = local.tags
 }
@@ -716,7 +716,7 @@ resource "aws_sns_topic_subscription" "pipeline_email" {
 
 # CloudWatch Event Rule for Pipeline State Changes
 resource "aws_cloudwatch_event_rule" "pipeline_state_changes" {
-  name        = "${local.name_prefix}-pipeline-state-changes"
+  name        = "$${local.name_prefix}-pipeline-state-changes"
   description = "Capture all CodePipeline state changes"
 
   event_pattern = jsonencode({
@@ -740,7 +740,7 @@ resource "aws_cloudwatch_event_target" "pipeline_notifications" {
 
 # Environment-specific deployment configurations
 resource "aws_codebuild_project" "deploy_dev" {
-  name          = "${local.name_prefix}-deploy-dev"
+  name          = "$${local.name_prefix}-deploy-dev"
   description   = "Deploy to development environment"
   build_timeout = "30"
   service_role  = aws_iam_role.codebuild.arn
@@ -796,7 +796,7 @@ resource "aws_codebuild_project" "deploy_dev" {
 }
 
 resource "aws_codebuild_project" "deploy_staging" {
-  name          = "${local.name_prefix}-deploy-staging"
+  name          = "$${local.name_prefix}-deploy-staging"
   description   = "Deploy to staging environment with canary"
   build_timeout = "45"
   service_role  = aws_iam_role.codebuild.arn
@@ -858,7 +858,7 @@ resource "aws_codebuild_project" "deploy_staging" {
 }
 
 resource "aws_codebuild_project" "deploy_production" {
-  name          = "${local.name_prefix}-deploy-production"
+  name          = "$${local.name_prefix}-deploy-production"
   description   = "Deploy to production environment with blue-green"
   build_timeout = "60"
   service_role  = aws_iam_role.codebuild.arn
@@ -924,7 +924,7 @@ resource "aws_codebuild_project" "deploy_production" {
 
 # CloudWatch Alarms for Deployment Monitoring
 resource "aws_cloudwatch_metric_alarm" "deployment_failure" {
-  alarm_name          = "${local.name_prefix}-deployment-failure"
+  alarm_name          = "$${local.name_prefix}-deployment-failure"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = "1"
   metric_name         = "DeploymentFailure"
@@ -941,7 +941,7 @@ resource "aws_cloudwatch_metric_alarm" "deployment_failure" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "high_error_rate_post_deployment" {
-  alarm_name          = "${local.name_prefix}-high-error-rate-post-deployment"
+  alarm_name          = "$${local.name_prefix}-high-error-rate-post-deployment"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = "2"
   metric_name         = "HTTPCode_Target_5XX_Count"

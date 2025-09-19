@@ -14,7 +14,7 @@ terraform {
 resource "aws_ecs_task_definition" "postgres_exporter" {
   count = var.enable_postgres_exporter ? 1 : 0
 
-  family                   = "${var.project_name}-postgres-exporter-${var.environment}"
+  family                   = "$${var.project_name}-postgres-exporter-${var.environment}"
   network_mode            = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                     = 256
@@ -44,7 +44,7 @@ resource "aws_ecs_task_definition" "postgres_exporter" {
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          "awslogs-group"         = "/ecs/${var.project_name}-postgres-exporter-${var.environment}"
+          "awslogs-group"         = "/ecs/$${var.project_name}-postgres-exporter-${var.environment}"
           "awslogs-region"        = var.aws_region
           "awslogs-stream-prefix" = "ecs"
         }
@@ -64,7 +64,7 @@ resource "aws_ecs_task_definition" "postgres_exporter" {
 resource "aws_ecs_service" "postgres_exporter" {
   count = var.enable_postgres_exporter ? 1 : 0
 
-  name            = "${var.project_name}-postgres-exporter"
+  name            = "$${var.project_name}-postgres-exporter"
   cluster         = var.ecs_cluster_id
   task_definition = aws_ecs_task_definition.postgres_exporter[0].arn
   desired_count   = 1
@@ -84,7 +84,7 @@ resource "aws_ecs_service" "postgres_exporter" {
 resource "aws_security_group" "postgres_exporter" {
   count = var.enable_postgres_exporter ? 1 : 0
 
-  name_prefix = "${var.project_name}-postgres-exporter-"
+  name_prefix = "$${var.project_name}-postgres-exporter-"
   vpc_id      = var.vpc_id
 
   ingress {
@@ -113,7 +113,7 @@ resource "aws_cloudwatch_log_group" "postgres_exporter" {
 resource "aws_ecs_task_definition" "redis_exporter" {
   count = var.enable_redis_exporter ? 1 : 0
 
-  family                   = "${var.project_name}-redis-exporter-${var.environment}"
+  family                   = "$${var.project_name}-redis-exporter-$${var.environment}"
   network_mode            = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                     = 256
@@ -151,7 +151,7 @@ resource "aws_ecs_task_definition" "redis_exporter" {
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          "awslogs-group"         = "/ecs/${var.project_name}-redis-exporter-${var.environment}"
+          "awslogs-group"         = "/ecs/$${var.project_name}-redis-exporter-$${var.environment}"
           "awslogs-region"        = var.aws_region
           "awslogs-stream-prefix" = "ecs"
         }
@@ -171,7 +171,7 @@ resource "aws_ecs_task_definition" "redis_exporter" {
 resource "aws_ecs_service" "redis_exporter" {
   count = var.enable_redis_exporter ? 1 : 0
 
-  name            = "${var.project_name}-redis-exporter"
+  name            = "$${var.project_name}-redis-exporter"
   cluster         = var.ecs_cluster_id
   task_definition = aws_ecs_task_definition.redis_exporter[0].arn
   desired_count   = 1
@@ -191,7 +191,7 @@ resource "aws_ecs_service" "redis_exporter" {
 resource "aws_security_group" "redis_exporter" {
   count = var.enable_redis_exporter ? 1 : 0
 
-  name_prefix = "${var.project_name}-redis-exporter-"
+  name_prefix = "$${var.project_name}-redis-exporter-"
   vpc_id      = var.vpc_id
 
   ingress {
@@ -212,7 +212,7 @@ resource "aws_security_group" "redis_exporter" {
 resource "aws_cloudwatch_log_group" "redis_exporter" {
   count = var.enable_redis_exporter ? 1 : 0
 
-  name              = "/ecs/${var.project_name}-redis-exporter-${var.environment}"
+  name              = "/ecs/$${var.project_name}-redis-exporter-$${var.environment}"
   retention_in_days = 30
 }
 
@@ -220,7 +220,7 @@ resource "aws_cloudwatch_log_group" "redis_exporter" {
 resource "aws_ecs_task_definition" "node_exporter" {
   count = var.enable_node_exporter ? 1 : 0
 
-  family                   = "${var.project_name}-node-exporter-${var.environment}"
+  family                   = "$${var.project_name}-node-exporter-$${var.environment}"
   network_mode            = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                     = 256
@@ -243,7 +243,7 @@ resource "aws_ecs_task_definition" "node_exporter" {
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          "awslogs-group"         = "/ecs/${var.project_name}-node-exporter-${var.environment}"
+          "awslogs-group"         = "/ecs/$${var.project_name}-node-exporter-$${var.environment}"
           "awslogs-region"        = var.aws_region
           "awslogs-stream-prefix" = "ecs"
         }
@@ -263,7 +263,7 @@ resource "aws_ecs_task_definition" "node_exporter" {
 resource "aws_ecs_service" "node_exporter" {
   count = var.enable_node_exporter ? 1 : 0
 
-  name            = "${var.project_name}-node-exporter"
+  name            = "$${var.project_name}-node-exporter"
   cluster         = var.ecs_cluster_id
   task_definition = aws_ecs_task_definition.node_exporter[0].arn
   desired_count   = 1
@@ -283,7 +283,7 @@ resource "aws_ecs_service" "node_exporter" {
 resource "aws_security_group" "node_exporter" {
   count = var.enable_node_exporter ? 1 : 0
 
-  name_prefix = "${var.project_name}-node-exporter-"
+  name_prefix = "$${var.project_name}-node-exporter-"
   vpc_id      = var.vpc_id
 
   ingress {
@@ -304,7 +304,7 @@ resource "aws_security_group" "node_exporter" {
 resource "aws_cloudwatch_log_group" "node_exporter" {
   count = var.enable_node_exporter ? 1 : 0
 
-  name              = "/ecs/${var.project_name}-node-exporter-${var.environment}"
+  name              = "/ecs/$${var.project_name}-node-exporter-$${var.environment}"
   retention_in_days = 30
 }
 
@@ -312,7 +312,7 @@ resource "aws_cloudwatch_log_group" "node_exporter" {
 resource "aws_ecs_task_definition" "app_metrics_exporter" {
   count = var.enable_app_metrics_exporter ? 1 : 0
 
-  family                   = "${var.project_name}-app-metrics-exporter-${var.environment}"
+  family                   = "$${var.project_name}-app-metrics-exporter-$${var.environment}"
   network_mode            = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                     = 256
@@ -323,7 +323,7 @@ resource "aws_ecs_task_definition" "app_metrics_exporter" {
   container_definitions = jsonencode([
     {
       name  = "app-metrics-exporter"
-      image = "${var.app_metrics_image}:${var.app_metrics_tag}"
+      image = "$${var.app_metrics_image}:$${var.app_metrics_tag}"
 
       environment = [
         {
@@ -350,7 +350,7 @@ resource "aws_ecs_task_definition" "app_metrics_exporter" {
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          "awslogs-group"         = "/ecs/${var.project_name}-app-metrics-exporter-${var.environment}"
+          "awslogs-group"         = "/ecs/$${var.project_name}-app-metrics-exporter-$${var.environment}"
           "awslogs-region"        = var.aws_region
           "awslogs-stream-prefix" = "ecs"
         }
@@ -370,7 +370,7 @@ resource "aws_ecs_task_definition" "app_metrics_exporter" {
 resource "aws_ecs_service" "app_metrics_exporter" {
   count = var.enable_app_metrics_exporter ? 1 : 0
 
-  name            = "${var.project_name}-app-metrics-exporter"
+  name            = "$${var.project_name}-app-metrics-exporter"
   cluster         = var.ecs_cluster_id
   task_definition = aws_ecs_task_definition.app_metrics_exporter[0].arn
   desired_count   = 1
@@ -390,7 +390,7 @@ resource "aws_ecs_service" "app_metrics_exporter" {
 resource "aws_security_group" "app_metrics_exporter" {
   count = var.enable_app_metrics_exporter ? 1 : 0
 
-  name_prefix = "${var.project_name}-app-metrics-exporter-"
+  name_prefix = "$${var.project_name}-app-metrics-exporter-"
   vpc_id      = var.vpc_id
 
   ingress {
@@ -411,6 +411,6 @@ resource "aws_security_group" "app_metrics_exporter" {
 resource "aws_cloudwatch_log_group" "app_metrics_exporter" {
   count = var.enable_app_metrics_exporter ? 1 : 0
 
-  name              = "/ecs/${var.project_name}-app-metrics-exporter-${var.environment}"
+  name              = "/ecs/$${var.project_name}-app-metrics-exporter-$${var.environment}"
   retention_in_days = 30
 }
