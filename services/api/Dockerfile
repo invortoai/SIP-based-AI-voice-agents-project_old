@@ -3,11 +3,26 @@
 FROM node:20-alpine AS deps
 WORKDIR /workspace
 
-# Copy root manifests and workspace package manifests to enable npm workspaces install
+# Copy root package.json first to establish workspace structure
 COPY package.json package-lock.json ./
-COPY packages/*/package.json packages/*/
-COPY services/*/package.json services/*/
-COPY sdk/*/package.json sdk/*/
+
+# Copy all workspace package.json files to enable proper dependency resolution
+COPY packages/shared/package.json packages/shared/
+COPY packages/shared-core/package.json packages/shared-core/
+COPY services/api/package.json services/api/
+COPY services/realtime/package.json services/realtime/
+COPY services/telephony/package.json services/telephony/
+COPY services/webhooks/package.json services/webhooks/
+COPY services/workers/package.json services/workers/
+COPY sdk/browser/package.json sdk/browser/
+COPY sdk/node/package.json sdk/node/
+COPY sdk/python/pyproject.toml sdk/python/
+
+# Copy source files for workspaces that need them for proper dependency resolution
+COPY packages/shared/src packages/shared/src
+COPY packages/shared-core/src packages/shared-core/src
+
+# Install all workspace dependencies
 RUN npm ci || npm install
 
 # Build only this workspace
