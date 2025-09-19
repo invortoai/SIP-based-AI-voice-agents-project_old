@@ -165,9 +165,9 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - REDIS_URL=${redis_url}
-      - DB_URL=${db_url}
-      - JWT_SECRET=${JWT_SECRET}
+      - REDIS_URL=$${redis_url}
+      - DB_URL=$${db_url}
+      - JWT_SECRET=$${JWT_SECRET}
     volumes:
       - ./config:/app/config
       - ./logs:/app/logs
@@ -183,7 +183,7 @@ services:
       - "10000-20000:10000-20000/udp"
     environment:
       - NODE_ENV=production
-      - REDIS_URL=${redis_url}
+      - REDIS_URL=$${redis_url}
       - SIP_PORT=5060
       - RTP_START_PORT=10000
       - RTP_END_PORT=20000
