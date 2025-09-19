@@ -4,7 +4,7 @@ variable "private_subnets" { type = list(string) }
 variable "node_type" { type = string }
 
 resource "aws_security_group" "redis" {
-  name_prefix = "$${var.environment}-redis-"
+  name_prefix = "${var.environment}-redis-"
   vpc_id      = var.vpc_id
 
   ingress {
@@ -23,12 +23,12 @@ resource "aws_security_group" "redis" {
 }
 
 resource "aws_elasticache_subnet_group" "this" {
-  name       = "$${var.environment}-invorto-redis-subnets"
+  name       = "${var.environment}-invorto-redis-subnets"
   subnet_ids = var.private_subnets
 }
 
 resource "aws_elasticache_cluster" "this" {
-  cluster_id           = "$${var.environment}-invorto-redis"
+  cluster_id           = "${var.environment}-invorto-redis"
   engine               = "redis"
   node_type            = var.node_type
   num_cache_nodes      = 1

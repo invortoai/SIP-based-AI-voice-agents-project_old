@@ -93,13 +93,13 @@ resource "aws_iam_role" "jambonz" {
 
 # IAM Instance Profile
 resource "aws_iam_instance_profile" "jambonz" {
-  name = "$${local.name_prefix}-profile"
+  name = "${local.name_prefix}-profile"
   role = aws_iam_role.jambonz.name
 }
 
 # IAM Policy for Jambonz
 resource "aws_iam_role_policy" "jambonz" {
-  name = "$${local.name_prefix}-policy"
+  name = "${local.name_prefix}-policy"
   role = aws_iam_role.jambonz.id
 
   policy = jsonencode({
@@ -193,7 +193,7 @@ resource "aws_launch_template" "jambonz" {
 
 # Auto Scaling Group
 resource "aws_autoscaling_group" "jambonz" {
-  name                = "$${local.name_prefix}-asg"
+  name                = "${local.name_prefix}-asg"
   desired_capacity    = var.desired_capacity
   max_size            = var.max_size
   min_size            = var.min_size
@@ -263,7 +263,7 @@ resource "aws_autoscaling_group" "jambonz" {
 
 # Auto Scaling Policies
 resource "aws_autoscaling_policy" "jambonz_scale_up" {
-  name                   = "$${local.name_prefix}-scale-up"
+  name                   = "${local.name_prefix}-scale-up"
   scaling_adjustment     = 1
   adjustment_type        = "ChangeInCapacity"
   cooldown               = 300
@@ -271,7 +271,7 @@ resource "aws_autoscaling_policy" "jambonz_scale_up" {
 }
 
 resource "aws_autoscaling_policy" "jambonz_scale_down" {
-  name                   = "$${local.name_prefix}-scale-down"
+  name                   = "${local.name_prefix}-scale-down"
   scaling_adjustment     = -1
   adjustment_type        = "ChangeInCapacity"
   cooldown               = 300
@@ -280,7 +280,7 @@ resource "aws_autoscaling_policy" "jambonz_scale_down" {
 
 # CloudWatch Alarms for Auto Scaling
 resource "aws_cloudwatch_metric_alarm" "jambonz_cpu_high" {
-  alarm_name          = "$${local.name_prefix}-cpu-high"
+  alarm_name          = "${local.name_prefix}-cpu-high"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = "2"
   metric_name         = "CPUUtilization"
@@ -297,7 +297,7 @@ resource "aws_cloudwatch_metric_alarm" "jambonz_cpu_high" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "jambonz_cpu_low" {
-  alarm_name          = "$${local.name_prefix}-cpu-low"
+  alarm_name          = "${local.name_prefix}-cpu-low"
   comparison_operator = "LessThanThreshold"
   evaluation_periods  = "2"
   metric_name         = "CPUUtilization"

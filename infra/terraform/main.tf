@@ -73,7 +73,7 @@ module "jambonz_media" {
   domain              = var.jambonz_domain
   redis_url           = "redis://$${module.redis.endpoint}:6379"
   db_url              = "postgresql://$${var.db_username}:$${var.db_password}@$${aws_db_instance.main.endpoint}:5432/$${var.db_name}"
-  secrets_arn         = module.secrets.jambonz_secret_arn
+  secrets_arn         = module.secrets.secret_arn
   sip_allowed_cidrs   = var.jambonz_sip_allowed_cidrs
   admin_allowed_cidrs = var.jambonz_admin_allowed_cidrs
   tags = {
@@ -112,10 +112,10 @@ module "s3" {
 
 # Telephony Service S3 Bucket for call recordings and logs
 resource "aws_s3_bucket" "telephony_data" {
-  bucket = "$${var.environment}-invorto-telephony-data"
+  bucket = "${var.environment}-invorto-telephony-data"
 
   tags = {
-    Name        = "$${var.environment}-invorto-telephony-data"
+    Name        = "${var.environment}-invorto-telephony-data"
     Environment = var.environment
     Service     = "telephony"
     Purpose     = "call-recordings-logs"
@@ -187,7 +187,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "telephony_data" {
 
 # IAM Role for Telephony Service
 resource "aws_iam_role" "telephony_task_role" {
-  name = "$${var.environment}-telephony-task-role"
+  name = "${var.environment}-telephony-task-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -209,7 +209,7 @@ resource "aws_iam_role" "telephony_task_role" {
 }
 
 resource "aws_iam_role_policy" "telephony_task_policy" {
-  name = "$${var.environment}-telephony-task-policy"
+  name = "${var.environment}-telephony-task-policy"
   role = aws_iam_role.telephony_task_role.id
 
   policy = jsonencode({
@@ -225,7 +225,7 @@ resource "aws_iam_role_policy" "telephony_task_policy" {
         ]
         Resource = [
           aws_s3_bucket.telephony_data.arn,
-          "$${aws_s3_bucket.telephony_data.arn}/*"
+          "${aws_s3_bucket.telephony_data.arn}/*"
         ]
       },
       {

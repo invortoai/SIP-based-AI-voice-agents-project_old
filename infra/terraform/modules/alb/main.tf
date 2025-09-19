@@ -16,7 +16,7 @@ resource "aws_lb" "main" {
 
 # ALB Security Group
 resource "aws_security_group" "alb" {
-  name_prefix = "$${var.environment}-invorto-alb-"
+  name_prefix = "${var.environment}-invorto-alb-"
   vpc_id      = var.vpc_id
 
   ingress {
@@ -40,7 +40,7 @@ resource "aws_security_group" "alb" {
     cidr_blocks = ["0.0.0.0/0"]
   }
   tags = {
-    Name = "$${var.environment}-invorto-alb-sg"
+    Name = "${var.environment}-invorto-alb-sg"
   }
 }
 
