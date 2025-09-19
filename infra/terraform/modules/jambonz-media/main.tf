@@ -155,6 +155,7 @@ resource "aws_launch_template" "jambonz" {
     redis_url   = var.redis_url
     db_url      = var.db_url
     secrets_arn = var.secrets_arn
+    JWT_SECRET  = module.secrets.secret_arns.jwt
   }))
 
   block_device_mappings {
