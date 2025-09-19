@@ -140,6 +140,7 @@ jobs:
       - name: Terraform validate
         working-directory: infra/terraform
         run: terraform validate
+        continue-on-error: false
       - name: Terraform plan
         working-directory: infra/terraform
         run: terraform plan -no-color -out=tfplan
