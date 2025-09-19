@@ -19,7 +19,7 @@
     "start": "npm run -ws --if-present start",
     "lint": "npm run -ws --if-present lint",
     "typecheck": "npm run -ws --if-present typecheck",
-    "test": "jest",
+    "test": "jest --coverage",
     "test:unit": "jest tests/unit",
     "test:integration": "jest tests/integration",
     "test:coverage": "jest --coverage",
