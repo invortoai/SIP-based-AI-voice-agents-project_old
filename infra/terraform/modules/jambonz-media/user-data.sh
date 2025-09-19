@@ -71,11 +71,11 @@ sudo -u jambonz git clone https://github.com/jambonz/jambonz-media-server.git
 # Create environment file
 cat > /opt/jambonz/.env << EOF
 # Jambonz Environment Configuration
-ENVIRONMENT=${environment}
-DOMAIN=${domain}
-REDIS_URL=${redis_url}
-DB_URL=${db_url}
-SECRETS_ARN=${secrets_arn}
+ENVIRONMENT=$${environment}
+DOMAIN=$${domain}
+REDIS_URL=$${redis_url}
+DB_URL=$${db_url}
+SECRETS_ARN=$${secrets_arn}
 
 # SIP Configuration
 SIP_PORT=5060
@@ -367,9 +367,9 @@ sleep 30
 if systemctl is-active --quiet jambonz.service; then
     echo "Jambonz Media Gateway installation completed successfully!"
     echo "Service is running and enabled"
-    echo "API endpoint: https://${domain}"
-    echo "SIP endpoint: ${domain}:5060"
-    echo "Health check: https://${domain}/health"
+    echo "API endpoint: https://$${domain}"
+    echo "SIP endpoint: $${domain}:5060"
+    echo "Health check: https://$${domain}/health"
 else
     echo "Jambonz service failed to start"
     systemctl status jambonz.service
