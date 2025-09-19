@@ -33,10 +33,9 @@ jobs:
           cache: 'npm'
       
       - name: Install dependencies
-        run: npm ci --workspaces
-
-      - name: Verify workspace structure
-        run: npm ls --workspaces
+        run: |
+          npm ci
+          npm run build
 
       - name: Run TypeScript type check
         run: npm run typecheck
@@ -84,13 +83,14 @@ jobs:
           cache: 'npm'
       
       - name: Install dependencies
-        run: npm ci --workspaces
-
-      - name: Verify workspace structure
-        run: npm ls --workspaces
+        run: |
+          npm ci
+          npm run build
 
       - name: Verify Jest installation
-        run: npx jest --version
+        run: |
+          ls -la node_modules/.bin/jest
+          npx jest --version
 
       - name: Run database migrations
         env:
