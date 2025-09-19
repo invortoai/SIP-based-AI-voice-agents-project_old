@@ -143,7 +143,17 @@ jobs:
         continue-on-error: false
       - name: Terraform plan
         working-directory: infra/terraform
-        run: terraform plan -no-color -out=tfplan
+        run: |
+          terraform plan -no-color -out=tfplan \
+            -var="deepgram_api_key=${{ secrets.DEEPGRAM_API_KEY }}" \
+            -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}" \
+            -var="jwt_secret=${{ secrets.JWT_SECRET }}" \
+            -var="webhook_secret=${{ secrets.WEBHOOK_SECRET }}" \
+            -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            -var="redis_password=${{ secrets.REDIS_PASSWORD }}" \
+            -var="certificate_arn=${{ secrets.CERTIFICATE_ARN }}" \
+            -var="github_connection_arn=${{ secrets.GITHUB_CONNECTION_ARN }}" \
+            -var="jambonz_key_name=${{ secrets.JAMBONZ_KEY_NAME }}"
       - name: Terraform show plan (no secrets)
         working-directory: infra/terraform
         run: terraform show -no-color tfplan > plan.txt

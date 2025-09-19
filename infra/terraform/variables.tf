@@ -46,6 +46,7 @@ variable "private_subnet_cidrs" {
 variable "domain_name" {
   description = "Domain name for the application"
   type        = string
+  default     = "api.invortoai.com"
 }
 
 variable "db_name" {
@@ -517,14 +518,12 @@ variable "domain" {
 variable "certificate_arn" {
   description = "ARN of the SSL certificate for ALB"
   type        = string
-  default     = ""
 }
 
 variable "db_password" {
   description = "Password for the database"
   type        = string
   sensitive   = true
-  default     = ""
 }
 
 # WAF Variables
@@ -666,5 +665,4 @@ variable "redis_password" {
   description = "Redis password"
   type        = string
   sensitive   = true
-  default     = ""
 }
