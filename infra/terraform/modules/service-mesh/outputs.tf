@@ -1,6 +1,6 @@
 output "istio_ingress_ip" {
   description = "Load balancer IP for Istio ingress gateway"
-  value       = var.enable_istio ? helm_release.istio_ingress[0].status[0].load_balancer[0].ingress[0].hostname : null
+  value       = var.enable_istio ? try(helm_release.istio_ingress[0].status[0].load_balancer[0].ingress[0].hostname, null) : null
 }
 
 output "kiali_url" {
@@ -20,9 +20,9 @@ output "prometheus_url" {
 
 output "istio_namespaces" {
   description = "List of namespaces with Istio injection enabled"
-  value = var.enable_istio ? [
+  value = var.enable_istio ? try([
     for ns in kubernetes_namespace.invorto_services : ns.metadata[0].name
-  ] : []
+  ], []) : []
 }
 
 output "service_mesh_endpoints" {
@@ -37,15 +37,15 @@ output "service_mesh_endpoints" {
 
 output "istio_gateway_name" {
   description = "Istio ingress gateway name"
-  value       = var.enable_istio ? kubernetes_manifest.api_gateway[0].manifest.metadata.name : null
+  value       = var.enable_istio ? try(kubernetes_manifest.api_gateway[0].manifest.metadata.name, null) : null
 }
 
 output "istio_virtual_service_name" {
   description = "API virtual service name"
-  value       = var.enable_istio ? kubernetes_manifest.api_virtual_service[0].manifest.metadata.name : null
+  value       = var.enable_istio ? try(kubernetes_manifest.api_virtual_service[0].manifest.metadata.name, null) : null
 }
 
 output "istio_destination_rule_name" {
   description = "API destination rule name"
-  value       = var.enable_istio ? kubernetes_manifest.api_destination_rule[0].manifest.metadata.name : null
+  value       = var.enable_istio ? try(kubernetes_manifest.api_destination_rule[0].manifest.metadata.name, null) : null
 }
