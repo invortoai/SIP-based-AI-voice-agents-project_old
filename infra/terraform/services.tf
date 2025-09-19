@@ -107,7 +107,68 @@
 # #   }
 # # }
 
-# # ECR Repository for Telephony - Temporarily disabled due to configuration issues
+# ECR Repositories for Docker images
+resource "aws_ecr_repository" "api" {
+  name                 = "invorto-api"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Environment = var.environment
+    Service     = "api"
+    ManagedBy   = "terraform"
+  }
+}
+
+resource "aws_ecr_repository" "realtime" {
+  name                 = "invorto-realtime"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Environment = var.environment
+    Service     = "realtime"
+    ManagedBy   = "terraform"
+  }
+}
+
+resource "aws_ecr_repository" "workers" {
+  name                 = "invorto-workers"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Environment = var.environment
+    Service     = "workers"
+    ManagedBy   = "terraform"
+  }
+}
+
+resource "aws_ecr_repository" "webhooks" {
+  name                 = "invorto-webhooks"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Environment = var.environment
+    Service     = "webhooks"
+    ManagedBy   = "terraform"
+  }
+}
+
+# ECR Repository for Telephony - Temporarily disabled due to configuration issues
 # resource "aws_ecr_repository" "telephony" {
 #   name                 = "${var.environment}-telephony"
 #   image_tag_mutability = "MUTABLE"
