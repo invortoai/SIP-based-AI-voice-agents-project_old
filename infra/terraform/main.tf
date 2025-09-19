@@ -76,8 +76,8 @@ module "jambonz_media" {
   max_size        = var.jambonz_max_size
   root_volume_size = var.jambonz_root_volume_size
   domain          = var.jambonz_domain
-  redis_url       = "redis://$${module.redis.endpoint}:6379"
-  db_url          = "postgresql://$${var.db_username}:$${var.db_password}@$${aws_db_instance.main.endpoint}:5432/$${var.db_name}"
+  redis_url = "redis://$${module.redis.endpoint}:6379"
+  db_url    = "postgresql://$${var.db_username}:$${var.db_password}@$${aws_db_instance.main.endpoint}:5432/$${var.db_name}"
   secrets_arn     = module.secrets.jambonz_secret_arn
   sip_allowed_cidrs = var.jambonz_sip_allowed_cidrs
   admin_allowed_cidrs = var.jambonz_admin_allowed_cidrs
@@ -111,7 +111,7 @@ module "redis" {
 module "s3" {
   source = "./modules/s3"
 
-  environment = var.environment
+  environment   = var.environment
   bucket_prefix = "invorto"
 }
 
@@ -366,19 +366,19 @@ module "cost_management" {
 module "service_mesh" {
   source = "./modules/service-mesh"
 
-  cluster_name = module.ecs_cluster.cluster_name
-  enable_istio = var.enable_service_mesh
-  istio_version = var.istio_version
-  enable_kiali = var.enable_kiali
-  enable_jaeger = var.enable_jaeger
-  enable_prometheus = var.enable_prometheus
+  cluster_name        = module.ecs_cluster.cluster_name
+  enable_istio        = var.enable_service_mesh
+  istio_version       = var.istio_version
+  enable_kiali        = var.enable_kiali
+  enable_jaeger       = var.enable_jaeger
+  enable_prometheus   = var.enable_prometheus
   ssl_certificate_arn = var.ssl_certificate_arn
-  jwt_issuer = var.jwt_issuer
-  jwks_uri = var.jwks_uri
-  jwt_audience = var.jwt_audience
+  jwt_issuer          = var.jwt_issuer
+  jwks_uri            = var.jwks_uri
+  jwt_audience        = var.jwt_audience
 
   tags = {
-    Service = "service-mesh"
+    Service   = "service-mesh"
     Component = "istio"
   }
 }
@@ -387,38 +387,38 @@ module "service_mesh" {
 module "monitoring_exporters" {
   source = "./modules/monitoring-exporters"
 
-  project_name    = var.project_name
-  environment     = var.environment
-  aws_region      = var.aws_region
-  vpc_id         = module.vpc.vpc_id
-  private_subnets = module.vpc.private_subnets
-  ecs_cluster_id = module.ecs_cluster.cluster_id
-  execution_role_arn = aws_iam_role.telephony_task_role.arn
-  task_role_arn = aws_iam_role.telephony_task_role.arn
+  project_name             = var.project_name
+  environment              = var.environment
+  aws_region               = var.aws_region
+  vpc_id                   = module.vpc.vpc_id
+  private_subnets          = module.vpc.private_subnets
+  ecs_cluster_id           = module.ecs_cluster.cluster_id
+  execution_role_arn       = aws_iam_role.telephony_task_role.arn
+  task_role_arn            = aws_iam_role.telephony_task_role.arn
   monitoring_security_groups = []
 
   # PostgreSQL
   enable_postgres_exporter = var.enable_postgres_exporter
-  db_endpoint = ""
-  db_username = var.db_username
-  db_password = var.db_password
-  db_name = var.db_name
+  db_endpoint              = ""
+  db_username              = var.db_username
+  db_password              = var.db_password
+  db_name                  = var.db_name
 
   # Redis
-  enable_redis_exporter = var.enable_redis_exporter
-  redis_endpoint = module.redis.endpoint
-  redis_password = var.redis_password
+  enable_redis_exporter    = var.enable_redis_exporter
+  redis_endpoint           = module.redis.endpoint
+  redis_password           = var.redis_password
 
   # Node Exporter
-  enable_node_exporter = var.enable_node_exporter
+  enable_node_exporter     = var.enable_node_exporter
 
   # Application Metrics
   enable_app_metrics_exporter = var.enable_app_metrics_exporter
-  app_metrics_image = var.app_metrics_image
-  app_metrics_tag = var.app_metrics_tag
+  app_metrics_image        = var.app_metrics_image
+  app_metrics_tag          = var.app_metrics_tag
 
   tags = {
-    Service = "monitoring-exporters"
+    Service   = "monitoring-exporters"
     Component = "observability"
   }
 }
