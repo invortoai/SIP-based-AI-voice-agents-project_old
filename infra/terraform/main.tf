@@ -53,6 +53,8 @@ module "vpc" {
 # ECS Cluster for Realtime WS + API + Webhooks + Workers
 module "ecs_cluster" {
   source = "./modules/ecs-cluster"
+
+  vpc_id = module.vpc.vpc_id
 }
 
 # Jambonz Media Gateway (EC2 ASG)

@@ -54,16 +54,9 @@ resource "aws_iam_role" "ecs_task_role" {
 }
 
 # Security Groups
-# Data source to get the VPC
-data "aws_vpc" "main" {
-  tags = {
-    Name = "dev-invorto-vpc"
-  }
-}
-
 resource "aws_security_group" "ecs_tasks" {
-  name_prefix = "production-invorto-ecs-"
-  vpc_id      = data.aws_vpc.main.id
+  name_prefix = "dev-invorto-ecs-"
+  vpc_id      = var.vpc_id
 
   ingress {
     protocol    = "tcp"
