@@ -30,7 +30,7 @@ resource "aws_ecs_task_definition" "postgres_exporter" {
       environment = [
         {
           name  = "DATA_SOURCE_NAME"
-          value = "postgresql://${var.db_username}:${var.db_password}@${var.db_endpoint}:5432/${var.db_name}?sslmode=require"
+          value = "postgresql://$${var.db_username}:$${var.db_password}@$${var.db_endpoint}:5432/$${var.db_name}?sslmode=require"
         }
       ]
 
@@ -129,7 +129,7 @@ resource "aws_ecs_task_definition" "redis_exporter" {
       environment = [
         {
           name  = "REDIS_ADDR"
-          value = "redis://${var.redis_endpoint}:6379"
+          value = "redis://$${var.redis_endpoint}:6379"
         },
         {
           name  = "REDIS_PASSWORD"
@@ -328,11 +328,11 @@ resource "aws_ecs_task_definition" "app_metrics_exporter" {
       environment = [
         {
           name  = "REDIS_URL"
-          value = "redis://${var.redis_endpoint}:6379"
+          value = "redis://$${var.redis_endpoint}:6379"
         },
         {
           name  = "DB_URL"
-          value = "postgresql://${var.db_username}:${var.db_password}@${var.db_endpoint}:5432/${var.db_name}"
+          value = "postgresql://$${var.db_username}:$${var.db_password}@$${var.db_endpoint}:5432/$${var.db_name}"
         },
         {
           name  = "METRICS_PORT"
