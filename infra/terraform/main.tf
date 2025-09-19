@@ -312,24 +312,24 @@ module "ci_cd" {
   }
 }
 
-# Backup and Disaster Recovery
-module "backup_dr" {
-  source = "./modules/backup-dr"
-
-  environment                   = var.environment
-  aws_region                    = var.aws_region
-  enable_cross_region_backup    = false # Disabled to avoid provider configuration issues
-  enable_backup_vault_lock      = var.enable_backup_vault_lock
-  backup_vault_lock_days        = var.backup_vault_lock_days
-  daily_backup_retention_days   = var.db_backup_retention_days
-  weekly_backup_retention_days  = var.db_weekly_backup_retention_days
-  monthly_backup_retention_days = var.db_monthly_backup_retention_days
-  backup_alarm_actions          = [module.monitoring.alerts_topic_arn]
-  tags = {
-    Service   = "backup-dr"
-    Component = "resilience"
-  }
-}
+# Backup and Disaster Recovery - Temporarily disabled due to provider configuration issues
+# module "backup_dr" {
+#   source = "./modules/backup-dr"
+#
+#   environment                   = var.environment
+#   aws_region                    = var.aws_region
+#   enable_cross_region_backup    = false # Disabled to avoid provider configuration issues
+#   enable_backup_vault_lock      = var.enable_backup_vault_lock
+#   backup_vault_lock_days        = var.backup_vault_lock_days
+#   daily_backup_retention_days   = var.db_backup_retention_days
+#   weekly_backup_retention_days  = var.db_weekly_backup_retention_days
+#   monthly_backup_retention_days = var.db_monthly_backup_retention_days
+#   backup_alarm_actions          = [module.monitoring.alerts_topic_arn]
+#   tags = {
+#     Service   = "backup-dr"
+#     Component = "resilience"
+#   }
+# }
 
 # Cost Management and Budget Controls
 module "cost_management" {
