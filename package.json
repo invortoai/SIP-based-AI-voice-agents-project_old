@@ -24,7 +24,8 @@
     "test:integration": "jest tests/integration",
     "test:coverage": "jest --coverage",
     "test:watch": "jest --watch",
-    "test:ci": "jest --runInBand"
+    "test:ci": "jest --runInBand",
+    "db:migrate": "echo 'No database migrations needed for this project'"
   },
   "devDependencies": {
     "@types/node": "^20.12.12",
