@@ -57,7 +57,7 @@ resource "aws_iam_role" "ecs_task_role" {
 # Data source to get the VPC
 data "aws_vpc" "main" {
   tags = {
-    Name = "production-invorto-vpc"
+    Name = "dev-invorto-vpc"
   }
 }
 

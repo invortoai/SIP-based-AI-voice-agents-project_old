@@ -23,9 +23,9 @@ resource "aws_subnet" "public" {
   }
 }
 
-# Private subnets (3 AZs for services)
+# Private subnets (2 AZs for services)
 resource "aws_subnet" "private" {
-  count             = 3
+  count             = 2
   vpc_id            = aws_vpc.main.id
   cidr_block        = cidrsubnet(var.vpc_cidr, 8, count.index + 10)
   availability_zone = var.azs[count.index]
@@ -100,7 +100,7 @@ resource "aws_route_table_association" "public" {
 }
 
 resource "aws_route_table_association" "private" {
-  count          = 3
+  count          = 2
   subnet_id      = aws_subnet.private[count.index].id
   route_table_id = aws_route_table.private.id
 }

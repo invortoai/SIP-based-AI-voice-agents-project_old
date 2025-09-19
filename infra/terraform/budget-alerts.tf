@@ -19,7 +19,7 @@ resource "aws_cloudwatch_metric_alarm" "daily_cost_alert" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "monthly_cost_alert" {
-  alarm_name          = "$${var.project_name}-monthly-cost-alert-$${var.environment}"
+  alarm_name          = "${var.project_name}-monthly-cost-alert-${var.environment}"
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = "1"
   metric_name         = "EstimatedCharges"
@@ -37,7 +37,7 @@ resource "aws_cloudwatch_metric_alarm" "monthly_cost_alert" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "budget_forecast_alert" {
-  alarm_name          = "$${var.project_name}-budget-forecast-alert-$${var.environment}"
+  alarm_name          = "${var.project_name}-budget-forecast-alert-${var.environment}"
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = "1"
   metric_name         = "EstimatedCharges"
@@ -55,7 +55,7 @@ resource "aws_cloudwatch_metric_alarm" "budget_forecast_alert" {
 }
 
 resource "aws_sns_topic" "budget_alerts" {
-  name = "$${var.project_name}-budget-alerts-$${var.environment}"
+  name = "${var.project_name}-budget-alerts-${var.environment}"
 }
 
 resource "aws_sns_topic_subscription" "budget_alerts_email" {
@@ -74,7 +74,7 @@ resource "aws_sns_topic_subscription" "budget_alerts_slack" {
 
 # Custom metrics for application-level cost tracking
 resource "aws_cloudwatch_metric_alarm" "high_cost_per_call" {
-  alarm_name          = "$${var.project_name}-high-cost-per-call-$${var.environment}"
+  alarm_name          = "${var.project_name}-high-cost-per-call-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = "5"
   metric_name         = "cost_per_call"
@@ -88,7 +88,7 @@ resource "aws_cloudwatch_metric_alarm" "high_cost_per_call" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "daily_tenant_cost_limit" {
-  alarm_name          = "$${var.project_name}-daily-tenant-cost-limit-$${var.environment}"
+  alarm_name          = "${var.project_name}-daily-tenant-cost-limit-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = "1"
   metric_name         = "daily_cost"
