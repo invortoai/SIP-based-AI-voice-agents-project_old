@@ -512,3 +512,159 @@ variable "domain" {
   type        = string
   default     = "api.invortoai.com"
 }
+
+# Missing variables that modules are expecting
+variable "certificate_arn" {
+  description = "ARN of the SSL certificate for ALB"
+  type        = string
+  default     = ""
+}
+
+variable "db_password" {
+  description = "Password for the database"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+# WAF Variables
+variable "waf_rate_limit" {
+  description = "Rate limit for WAF"
+  type        = number
+  default     = 2000
+}
+
+variable "waf_allowed_countries" {
+  description = "List of allowed country codes for WAF"
+  type        = list(string)
+  default     = ["US", "IN", "GB", "CA", "AU"]
+}
+
+variable "waf_blocked_countries" {
+  description = "List of blocked country codes for WAF"
+  type        = list(string)
+  default     = []
+}
+
+variable "waf_allowed_ip_addresses" {
+  description = "List of allowed IP addresses for WAF"
+  type        = list(string)
+  default     = []
+}
+
+variable "waf_blocked_ip_addresses" {
+  description = "List of blocked IP addresses for WAF"
+  type        = list(string)
+  default     = []
+}
+
+variable "waf_blocked_requests_threshold" {
+  description = "Threshold for blocked requests alarm"
+  type        = number
+  default     = 100
+}
+
+variable "waf_enable_logging" {
+  description = "Enable WAF logging"
+  type        = bool
+  default     = true
+}
+
+# Service Mesh Variables
+variable "enable_service_mesh" {
+  description = "Enable service mesh (Istio)"
+  type        = bool
+  default     = false
+}
+
+variable "istio_version" {
+  description = "Istio version to install"
+  type        = string
+  default     = "1.19.0"
+}
+
+variable "enable_kiali" {
+  description = "Enable Kiali dashboard"
+  type        = bool
+  default     = false
+}
+
+variable "enable_jaeger" {
+  description = "Enable Jaeger tracing"
+  type        = bool
+  default     = false
+}
+
+variable "enable_prometheus" {
+  description = "Enable Prometheus monitoring"
+  type        = bool
+  default     = false
+}
+
+variable "ssl_certificate_arn" {
+  description = "SSL certificate ARN for service mesh"
+  type        = string
+  default     = ""
+}
+
+variable "jwt_issuer" {
+  description = "JWT issuer for service mesh"
+  type        = string
+  default     = ""
+}
+
+variable "jwks_uri" {
+  description = "JWKS URI for service mesh"
+  type        = string
+  default     = ""
+}
+
+variable "jwt_audience" {
+  description = "JWT audience for service mesh"
+  type        = string
+  default     = ""
+}
+
+# Monitoring Exporters Variables
+variable "enable_postgres_exporter" {
+  description = "Enable PostgreSQL exporter"
+  type        = bool
+  default     = false
+}
+
+variable "enable_redis_exporter" {
+  description = "Enable Redis exporter"
+  type        = bool
+  default     = false
+}
+
+variable "enable_node_exporter" {
+  description = "Enable Node exporter"
+  type        = bool
+  default     = false
+}
+
+variable "enable_app_metrics_exporter" {
+  description = "Enable application metrics exporter"
+  type        = bool
+  default     = false
+}
+
+variable "app_metrics_image" {
+  description = "Docker image for app metrics exporter"
+  type        = string
+  default     = "prom/node-exporter"
+}
+
+variable "app_metrics_tag" {
+  description = "Docker tag for app metrics exporter"
+  type        = string
+  default     = "latest"
+}
+
+variable "redis_password" {
+  description = "Redis password"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
