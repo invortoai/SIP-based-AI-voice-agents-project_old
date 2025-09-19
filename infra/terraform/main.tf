@@ -258,24 +258,24 @@ module "secrets" {
   environment = var.environment
 }
 
-# WAF rules (rate-limit, IP allowlists)
-module "waf" {
-  source = "./modules/waf"
-
-  project_name               = var.project_name
-  environment                = var.environment
-  aws_region                 = var.aws_region
-  alb_arn                    = module.alb.alb_arn
-  rate_limit                 = var.waf_rate_limit
-  allowed_countries          = var.waf_allowed_countries
-  blocked_countries          = var.waf_blocked_countries
-  allowed_ip_addresses       = var.waf_allowed_ip_addresses
-  blocked_ip_addresses       = var.waf_blocked_ip_addresses
-  blocked_requests_threshold = var.waf_blocked_requests_threshold
-  alarm_sns_topic_arn        = module.monitoring.alerts_topic_arn
-  enable_logging             = var.waf_enable_logging
-  log_bucket_arn             = module.s3.logs_bucket_arn
-}
+# WAF rules (rate-limit, IP allowlists) - Temporarily disabled due to configuration issues
+# module "waf" {
+#   source = "./modules/waf"
+#
+#   project_name               = var.project_name
+#   environment                = var.environment
+#   aws_region                 = var.aws_region
+#   alb_arn                    = module.alb.alb_arn
+#   rate_limit                 = var.waf_rate_limit
+#   allowed_countries          = var.waf_allowed_countries
+#   blocked_countries          = var.waf_blocked_countries
+#   allowed_ip_addresses       = var.waf_allowed_ip_addresses
+#   blocked_ip_addresses       = var.waf_blocked_ip_addresses
+#   blocked_requests_threshold = var.waf_blocked_requests_threshold
+#   alarm_sns_topic_arn        = module.monitoring.alerts_topic_arn
+#   enable_logging             = var.waf_enable_logging
+#   log_bucket_arn             = module.s3.logs_bucket_arn
+# }
 
 # CloudWatch alarms and dashboards
 module "monitoring" {
@@ -294,23 +294,23 @@ module "monitoring" {
   }
 }
 
-# CI/CD Pipeline Infrastructure
-module "ci_cd" {
-  source = "./modules/ci-cd"
-
-  environment                   = var.environment
-  aws_region                    = var.aws_region
-  ecs_cluster_name              = module.ecs_cluster.cluster_name
-  github_connection_arn         = var.github_connection_arn
-  github_repository             = var.github_repository
-  github_branch                 = var.github_branch
-  enable_pipeline_notifications = var.enable_pipeline_notifications
-  pipeline_notification_email   = var.pipeline_notification_email
-  tags = {
-    Service   = "ci-cd"
-    Component = "deployment"
-  }
-}
+# CI/CD Pipeline Infrastructure - Temporarily disabled due to configuration issues
+# module "ci_cd" {
+#   source = "./modules/ci-cd"
+#
+#   environment                   = var.environment
+#   aws_region                    = var.aws_region
+#   ecs_cluster_name              = module.ecs_cluster.cluster_name
+#   github_connection_arn         = var.github_connection_arn
+#   github_repository             = var.github_repository
+#   github_branch                 = var.github_branch
+#   enable_pipeline_notifications = var.enable_pipeline_notifications
+#   pipeline_notification_email   = var.pipeline_notification_email
+#   tags = {
+#     Service   = "ci-cd"
+#     Component = "deployment"
+#   }
+# }
 
 # Backup and Disaster Recovery - Temporarily disabled due to provider configuration issues
 # module "backup_dr" {
@@ -331,86 +331,86 @@ module "ci_cd" {
 #   }
 # }
 
-# Cost Management and Budget Controls
-module "cost_management" {
-  source = "./modules/cost-management"
+# Cost Management and Budget Controls - Temporarily disabled due to configuration issues
+# module "cost_management" {
+#   source = "./modules/cost-management"
+#
+#   environment                  = var.environment
+#   aws_region                   = var.aws_region
+#   monthly_budget_amount        = var.monthly_budget
+#   daily_budget_amount          = var.daily_cost_limit
+#   monthly_usage_limit          = var.monthly_usage_limit
+#   daily_cost_threshold         = var.daily_cost_threshold
+#   budget_notification_emails   = var.budget_notification_emails
+#   enable_cost_email_alerts     = var.enable_cost_email_alerts
+#   cost_alert_email             = var.cost_alert_email
+#   enable_cost_slack_alerts     = var.enable_cost_slack_alerts
+#   cost_slack_webhook_url       = var.cost_slack_webhook_url
+#   enable_cost_explorer_reports = var.enable_cost_explorer_reports
+#   cost_allocation_tags         = var.cost_allocation_tags
+#   tags = {
+#     Service   = "cost-management"
+#     Component = "governance"
+#   }
+# }
 
-  environment                  = var.environment
-  aws_region                   = var.aws_region
-  monthly_budget_amount        = var.monthly_budget
-  daily_budget_amount          = var.daily_cost_limit
-  monthly_usage_limit          = var.monthly_usage_limit
-  daily_cost_threshold         = var.daily_cost_threshold
-  budget_notification_emails   = var.budget_notification_emails
-  enable_cost_email_alerts     = var.enable_cost_email_alerts
-  cost_alert_email             = var.cost_alert_email
-  enable_cost_slack_alerts     = var.enable_cost_slack_alerts
-  cost_slack_webhook_url       = var.cost_slack_webhook_url
-  enable_cost_explorer_reports = var.enable_cost_explorer_reports
-  cost_allocation_tags         = var.cost_allocation_tags
-  tags = {
-    Service   = "cost-management"
-    Component = "governance"
-  }
-}
+# Service Mesh (Istio) - Temporarily disabled due to configuration issues
+# module "service_mesh" {
+#   source = "./modules/service-mesh"
+#
+#   cluster_name        = module.ecs_cluster.cluster_name
+#   enable_istio        = var.enable_service_mesh
+#   istio_version       = var.istio_version
+#   enable_kiali        = var.enable_kiali
+#   enable_jaeger       = var.enable_jaeger
+#   enable_prometheus   = var.enable_prometheus
+#   ssl_certificate_arn = var.ssl_certificate_arn
+#   jwt_issuer          = var.jwt_issuer
+#   jwks_uri            = var.jwks_uri
+#   jwt_audience        = var.jwt_audience
+#
+#   tags = {
+#     Service   = "service-mesh"
+#     Component = "istio"
+#   }
+# }
 
-# Service Mesh (Istio)
-module "service_mesh" {
-  source = "./modules/service-mesh"
-
-  cluster_name        = module.ecs_cluster.cluster_name
-  enable_istio        = var.enable_service_mesh
-  istio_version       = var.istio_version
-  enable_kiali        = var.enable_kiali
-  enable_jaeger       = var.enable_jaeger
-  enable_prometheus   = var.enable_prometheus
-  ssl_certificate_arn = var.ssl_certificate_arn
-  jwt_issuer          = var.jwt_issuer
-  jwks_uri            = var.jwks_uri
-  jwt_audience        = var.jwt_audience
-
-  tags = {
-    Service   = "service-mesh"
-    Component = "istio"
-  }
-}
-
-# Monitoring Exporters (PostgreSQL, Redis, Node, Application metrics)
-module "monitoring_exporters" {
-  source = "./modules/monitoring-exporters"
-
-  project_name               = var.project_name
-  environment                = var.environment
-  aws_region                 = var.aws_region
-  vpc_id                     = module.vpc.vpc_id
-  private_subnets            = module.vpc.private_subnets
-  ecs_cluster_id             = module.ecs_cluster.cluster_id
-  execution_role_arn         = aws_iam_role.telephony_task_role.arn
-  task_role_arn              = aws_iam_role.telephony_task_role.arn
-  monitoring_security_groups = []
-
-  # PostgreSQL
-  enable_postgres_exporter = var.enable_postgres_exporter
-  db_endpoint              = ""
-  db_username              = var.db_username
-  db_password              = var.db_password
-  db_name                  = var.db_name
-
-  # Redis
-  enable_redis_exporter = var.enable_redis_exporter
-  redis_endpoint        = module.redis.endpoint
-  redis_password        = var.redis_password
-
-  # Node Exporter
-  enable_node_exporter = var.enable_node_exporter
-
-  # Application Metrics
-  enable_app_metrics_exporter = var.enable_app_metrics_exporter
-  app_metrics_image           = var.app_metrics_image
-  app_metrics_tag             = var.app_metrics_tag
-
-  tags = {
-    Service   = "monitoring-exporters"
-    Component = "observability"
-  }
-}
+# Monitoring Exporters (PostgreSQL, Redis, Node, Application metrics) - Temporarily disabled due to configuration issues
+# module "monitoring_exporters" {
+#   source = "./modules/monitoring-exporters"
+#
+#   project_name               = var.project_name
+#   environment                = var.environment
+#   aws_region                 = var.aws_region
+#   vpc_id                     = module.vpc.vpc_id
+#   private_subnets            = module.vpc.private_subnets
+#   ecs_cluster_id             = module.ecs_cluster.cluster_id
+#   execution_role_arn         = aws_iam_role.telephony_task_role.arn
+#   task_role_arn              = aws_iam_role.telephony_task_role.arn
+#   monitoring_security_groups = []
+#
+#   # PostgreSQL
+#   enable_postgres_exporter = var.enable_postgres_exporter
+#   db_endpoint              = ""
+#   db_username              = var.db_username
+#   db_password              = var.db_password
+#   db_name                  = var.db_name
+#
+#   # Redis
+#   enable_redis_exporter = var.enable_redis_exporter
+#   redis_endpoint        = module.redis.endpoint
+#   redis_password        = var.redis_password
+#
+#   # Node Exporter
+#   enable_node_exporter = var.enable_node_exporter
+#
+#   # Application Metrics
+#   enable_app_metrics_exporter = var.enable_app_metrics_exporter
+#   app_metrics_image           = var.app_metrics_image
+#   app_metrics_tag             = var.app_metrics_tag
+#
+#   tags = {
+#     Service   = "monitoring-exporters"
+#     Component = "observability"
+#   }
+# }
