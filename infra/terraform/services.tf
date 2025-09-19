@@ -50,9 +50,18 @@ resource "aws_ecs_task_definition" "telephony" {
       environment = [
         { name = "NODE_ENV", value = "production" },
         { name = "PORT", value = "8085" },
-        { name = "REDIS_URL", value = "redis://$${module.redis.endpoint}:6379" },
-        { name = "PUBLIC_BASE_URL", value = "https://$${var.domain}" },
-        { name = "REALTIME_WS_URL", value = "wss://$${var.domain}/v1/realtime" },
+        {
+          name  = "REDIS_URL"
+          value = "redis://$${module.redis.endpoint}:6379"
+        },
+        {
+          name  = "PUBLIC_BASE_URL"
+          value = "https://$${var.domain}"
+        },
+        {
+          name  = "REALTIME_WS_URL"
+          value = "wss://$${var.domain}/v1/realtime"
+        },
         { name = "CALL_TIMEOUT_MINUTES", value = "30" },
         { name = "CLEANUP_INTERVAL_MINUTES", value = "5" },
         { name = "CIRCUIT_BREAKER_FAILURE_THRESHOLD", value = "5" },
@@ -62,24 +71,24 @@ resource "aws_ecs_task_definition" "telephony" {
       secrets = [
         {
           name      = "TELEPHONY_SHARED_SECRET"
-          valueFrom = "${module.secrets.telephony_secret_arn}:TELEPHONY_SHARED_SECRET::"
+          valueFrom = "$${module.secrets.telephony_secret_arn}:TELEPHONY_SHARED_SECRET::"
         },
         {
           name      = "JAMBONZ_WEBHOOK_SECRET"
-          valueFrom = "${module.secrets.jambonz_secret_arn}:JAMBONZ_WEBHOOK_SECRET::"
+          valueFrom = "$${module.secrets.jambonz_secret_arn}:JAMBONZ_WEBHOOK_SECRET::"
         },
         {
           name      = "ALLOWED_JAMBONZ_IPS"
-          valueFrom = "${module.secrets.telephony_secret_arn}:ALLOWED_JAMBONZ_IPS::"
+          valueFrom = "$${module.secrets.telephony_secret_arn}:ALLOWED_JAMBONZ_IPS::"
         }
       ]
 
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          "awslogs-group"         = "/ecs/${var.environment}/telephony"
-          "awslogs-region"        = var.aws_region
-          "awslogs-stream-prefix" = "ecs"
+          awslogs-group         = "/ecs/$${var.environment}/telephony"
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "ecs"
         }
       }
 
@@ -179,7 +188,7 @@ resource "aws_lb_listener" "telephony" {
 
 # CloudWatch Log Group
 resource "aws_cloudwatch_log_group" "telephony" {
-  name              = "/ecs/${var.environment}/telephony"
+  name              = "/ecs/$${var.environment}/telephony"
   retention_in_days = 30
 
   tags = {
