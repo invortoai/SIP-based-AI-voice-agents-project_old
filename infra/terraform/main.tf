@@ -76,8 +76,8 @@ module "jambonz_media" {
   max_size        = var.jambonz_max_size
   root_volume_size = var.jambonz_root_volume_size
   domain          = var.jambonz_domain
-  redis_url       = "redis://${module.redis.endpoint}:6379"
-  db_url          = "postgresql://${var.db_username}:${var.db_password}@${aws_db_instance.main.endpoint}:5432/${var.db_name}"
+  redis_url       = "redis://$${module.redis.endpoint}:6379"
+  db_url          = "postgresql://$${var.db_username}:$${var.db_password}@$${aws_db_instance.main.endpoint}:5432/$${var.db_name}"
   secrets_arn     = module.secrets.jambonz_secret_arn
   sip_allowed_cidrs = var.jambonz_sip_allowed_cidrs
   admin_allowed_cidrs = var.jambonz_admin_allowed_cidrs

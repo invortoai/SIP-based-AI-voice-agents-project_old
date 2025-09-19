@@ -50,9 +50,9 @@ resource "aws_ecs_task_definition" "telephony" {
       environment = [
         { name = "NODE_ENV", value = "production" },
         { name = "PORT", value = "8085" },
-        { name = "REDIS_URL", value = "redis://${module.redis.endpoint}:6379" },
-        { name = "PUBLIC_BASE_URL", value = "https://${var.domain}" },
-        { name = "REALTIME_WS_URL", value = "wss://${var.domain}/v1/realtime" },
+        { name = "REDIS_URL", value = "redis://$${module.redis.endpoint}:6379" },
+        { name = "PUBLIC_BASE_URL", value = "https://$${var.domain}" },
+        { name = "REALTIME_WS_URL", value = "wss://$${var.domain}/v1/realtime" },
         { name = "CALL_TIMEOUT_MINUTES", value = "30" },
         { name = "CLEANUP_INTERVAL_MINUTES", value = "5" },
         { name = "CIRCUIT_BREAKER_FAILURE_THRESHOLD", value = "5" },

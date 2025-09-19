@@ -591,7 +591,7 @@ resource "aws_codepipeline" "main" {
       configuration = {
         NotificationArn = aws_sns_topic.pipeline_notifications.arn
         CustomData      = "CRITICAL: Approve deployment to PRODUCTION environment"
-        ExternalEntityLink = "https://github.com/${var.github_repository}/releases"
+        ExternalEntityLink = "https://github.com/$${var.github_repository}/releases"
       }
     }
 

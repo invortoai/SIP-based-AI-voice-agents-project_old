@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  actions: write 
   id-token: write
   security-events: write
 
