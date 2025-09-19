@@ -4,7 +4,7 @@
 locals {
   name_prefix = "invorto-cicd"
   tags = merge(var.tags, {
-    Service = "ci-cd"
+    Service   = "ci-cd"
     Component = "deployment"
   })
 }
@@ -12,7 +12,7 @@ locals {
 # S3 Bucket for Pipeline Artifacts
 resource "aws_s3_bucket" "pipeline_artifacts" {
   bucket = "$${local.name_prefix}-artifacts-$${random_string.bucket_suffix.result}"
-  
+
   tags = local.tags
 }
 
@@ -26,7 +26,7 @@ resource "random_string" "bucket_suffix" {
 # S3 Bucket Versioning
 resource "aws_s3_bucket_versioning" "pipeline_artifacts" {
   bucket = aws_s3_bucket.pipeline_artifacts.id
-  
+
   versioning_configuration {
     status = "Enabled"
   }
@@ -589,8 +589,8 @@ resource "aws_codepipeline" "main" {
       version  = "1"
 
       configuration = {
-        NotificationArn = aws_sns_topic.pipeline_notifications.arn
-        CustomData      = "CRITICAL: Approve deployment to PRODUCTION environment"
+        NotificationArn    = aws_sns_topic.pipeline_notifications.arn
+        CustomData         = "CRITICAL: Approve deployment to PRODUCTION environment"
         ExternalEntityLink = "https://github.com/$${var.github_repository}/releases"
       }
     }
@@ -702,7 +702,7 @@ resource "aws_iam_role_policy" "github_actions" {
 # SNS Topic for Pipeline Notifications
 resource "aws_sns_topic" "pipeline_notifications" {
   name = "$${local.name_prefix}-notifications"
-  
+
   tags = local.tags
 }
 

@@ -4,7 +4,7 @@
 locals {
   name_prefix = "invorto-jambonz"
   tags = merge(var.tags, {
-    Service = "jambonz-media"
+    Service   = "jambonz-media"
     Component = "telephony"
   })
 }
@@ -199,8 +199,8 @@ resource "aws_autoscaling_group" "jambonz" {
   min_size            = var.min_size
   target_group_arns   = var.target_group_arns
   vpc_zone_identifier = var.private_subnets
-  
-  health_check_type         = "ELB"
+
+  health_check_type = "ELB"
 
   launch_template {
     id      = aws_launch_template.jambonz.id
@@ -225,17 +225,17 @@ resource "aws_autoscaling_group" "jambonz" {
       }
 
       override {
-        instance_type = "c5.2xlarge"
+        instance_type     = "c5.2xlarge"
         weighted_capacity = "1"
       }
 
       override {
-        instance_type = "c5.xlarge"
+        instance_type     = "c5.xlarge"
         weighted_capacity = "0.8"
       }
 
       override {
-        instance_type = "c5.4xlarge"
+        instance_type     = "c5.4xlarge"
         weighted_capacity = "1.2"
       }
     }

@@ -4,7 +4,7 @@
 locals {
   name_prefix = "invorto-backup-dr"
   tags = merge(var.tags, {
-    Service = "backup-dr"
+    Service   = "backup-dr"
     Component = "resilience"
   })
 }
@@ -12,15 +12,15 @@ locals {
 # AWS Backup Vault
 resource "aws_backup_vault" "main" {
   name = "${local.name_prefix}-vault"
-  
+
   tags = local.tags
 }
 
 # AWS Backup Vault Lock Configuration (Optional)
 resource "aws_backup_vault_lock_configuration" "main" {
   count = var.enable_backup_vault_lock ? 1 : 0
-  
-  backup_vault_name = aws_backup_vault.main.name
+
+  backup_vault_name   = aws_backup_vault.main.name
   changeable_for_days = var.backup_vault_lock_days
 }
 
@@ -76,10 +76,10 @@ resource "aws_backup_plan" "main" {
 # Cross-Region Backup Vault (Disaster Recovery)
 resource "aws_backup_vault" "dr" {
   count = var.enable_cross_region_backup ? 1 : 0
-  
+
   provider = aws.dr_region
   name     = "${local.name_prefix}-dr-vault"
-  
+
   tags = merge(local.tags, {
     Purpose = "disaster-recovery"
   })
@@ -161,7 +161,7 @@ resource "aws_iam_role_policy_attachment" "backup_restore" {
 # S3 Bucket for Application Data Backup
 resource "aws_s3_bucket" "application_backup" {
   bucket = "${local.name_prefix}-app-data-${random_string.bucket_suffix.result}"
-  
+
   tags = local.tags
 }
 
@@ -175,7 +175,7 @@ resource "random_string" "bucket_suffix" {
 # S3 Bucket Versioning
 resource "aws_s3_bucket_versioning" "application_backup" {
   bucket = aws_s3_bucket.application_backup.id
-  
+
   versioning_configuration {
     status = "Enabled"
   }
@@ -228,14 +228,14 @@ resource "aws_s3_bucket_lifecycle_configuration" "application_backup" {
 # S3 Bucket for Configuration Backup
 resource "aws_s3_bucket" "config_backup" {
   bucket = "${local.name_prefix}-config-${random_string.bucket_suffix.result}"
-  
+
   tags = local.tags
 }
 
 # S3 Bucket Versioning for Config
 resource "aws_s3_bucket_versioning" "config_backup" {
   bucket = aws_s3_bucket.config_backup.id
-  
+
   versioning_configuration {
     status = "Enabled"
   }
@@ -279,9 +279,9 @@ resource "aws_s3_bucket_lifecycle_configuration" "config_backup" {
 # Cross-Region Replication for Application Data
 resource "aws_s3_bucket_replication_configuration" "application_backup" {
   count = var.enable_cross_region_backup ? 1 : 0
-  
+
   depends_on = [aws_s3_bucket_versioning.application_backup]
-  
+
   role   = aws_iam_role.replication[0].arn
   bucket = aws_s3_bucket.application_backup.id
 
@@ -305,10 +305,10 @@ resource "aws_s3_bucket_replication_configuration" "application_backup" {
 # Cross-Region S3 Bucket for Application Data
 resource "aws_s3_bucket" "dr_application_backup" {
   count = var.enable_cross_region_backup ? 1 : 0
-  
+
   provider = aws.dr_region
   bucket   = "${local.name_prefix}-dr-app-data-${random_string.bucket_suffix.result}"
-  
+
   tags = merge(local.tags, {
     Purpose = "disaster-recovery"
   })
@@ -317,10 +317,10 @@ resource "aws_s3_bucket" "dr_application_backup" {
 # Cross-Region S3 Bucket Versioning
 resource "aws_s3_bucket_versioning" "dr_application_backup" {
   count = var.enable_cross_region_backup ? 1 : 0
-  
+
   provider = aws.dr_region
   bucket   = aws_s3_bucket.dr_application_backup[0].id
-  
+
   versioning_configuration {
     status = "Enabled"
   }
@@ -329,7 +329,7 @@ resource "aws_s3_bucket_versioning" "dr_application_backup" {
 # Cross-Region S3 Bucket Encryption
 resource "aws_s3_bucket_server_side_encryption_configuration" "dr_application_backup" {
   count = var.enable_cross_region_backup ? 1 : 0
-  
+
   provider = aws.dr_region
   bucket   = aws_s3_bucket.dr_application_backup[0].id
 
@@ -343,7 +343,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "dr_application_ba
 # IAM Role for S3 Replication
 resource "aws_iam_role" "replication" {
   count = var.enable_cross_region_backup ? 1 : 0
-  
+
   name = "${local.name_prefix}-replication-role"
 
   assume_role_policy = jsonencode({
@@ -365,7 +365,7 @@ resource "aws_iam_role" "replication" {
 # IAM Policy for S3 Replication
 resource "aws_iam_role_policy" "replication" {
   count = var.enable_cross_region_backup ? 1 : 0
-  
+
   name = "${local.name_prefix}-replication-policy"
   role = aws_iam_role.replication[0].id
 

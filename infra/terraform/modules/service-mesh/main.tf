@@ -21,7 +21,7 @@ terraform {
 locals {
   name_prefix = "invorto-istio"
   tags = merge(var.tags, {
-    Service = "service-mesh"
+    Service   = "service-mesh"
     Component = "istio"
   })
 }
@@ -140,10 +140,10 @@ resource "helm_release" "istio_ingress" {
       service = {
         type = "LoadBalancer"
         annotations = {
-          "service.beta.kubernetes.io/aws-load-balancer-type"                    = "nlb"
+          "service.beta.kubernetes.io/aws-load-balancer-type"                              = "nlb"
           "service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled" = "true"
-          "service.beta.kubernetes.io/aws-load-balancer-ssl-cert"               = var.ssl_certificate_arn
-          "service.beta.kubernetes.io/aws-load-balancer-ssl-ports"              = "443"
+          "service.beta.kubernetes.io/aws-load-balancer-ssl-cert"                          = var.ssl_certificate_arn
+          "service.beta.kubernetes.io/aws-load-balancer-ssl-ports"                         = "443"
         }
       }
 
@@ -189,7 +189,7 @@ resource "kubernetes_manifest" "peer_authentication" {
 
     spec = {
       mtls = {
-        mode = "PERMISSIVE"  # Allow both mTLS and plain text traffic during transition
+        mode = "PERMISSIVE" # Allow both mTLS and plain text traffic during transition
       }
     }
   }
@@ -272,7 +272,7 @@ resource "kubernetes_manifest" "api_virtual_service" {
 
           timeout = "30s"
           retries = {
-            attempts = 3
+            attempts      = 3
             perTryTimeout = "10s"
           }
         },
@@ -551,7 +551,7 @@ resource "helm_release" "jaeger" {
       }
 
       agent = {
-        enabled = false  # Istio handles tracing
+        enabled = false # Istio handles tracing
       }
     })
   ]
