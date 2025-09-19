@@ -109,7 +109,7 @@ resource "aws_ecs_task_definition" "telephony" {
 
 # ECR Repository for Telephony
 resource "aws_ecr_repository" "telephony" {
-  name                 = "${var.environment}-telephony"
+  name                 = "$${var.environment}-telephony"
   image_tag_mutability = "MUTABLE"
 
   image_scanning_configuration {
@@ -124,7 +124,7 @@ resource "aws_ecr_repository" "telephony" {
 
 # Security Group for Telephony
 resource "aws_security_group" "telephony" {
-  name_prefix = "${var.environment}-telephony-"
+  name_prefix = "$${var.environment}-telephony-"
   vpc_id      = module.vpc.vpc_id
 
   ingress {
@@ -142,7 +142,7 @@ resource "aws_security_group" "telephony" {
   }
 
   tags = {
-    Name        = "${var.environment}-telephony-sg"
+    Name        = "$${var.environment}-telephony-sg"
     Environment = var.environment
     Service     = "telephony"
   }
@@ -150,7 +150,7 @@ resource "aws_security_group" "telephony" {
 
 # ALB Target Group for Telephony
 resource "aws_lb_target_group" "telephony" {
-  name        = "${var.environment}-telephony"
+  name        = "$${var.environment}-telephony"
   port        = 8085
   protocol    = "HTTP"
   vpc_id      = module.vpc.vpc_id

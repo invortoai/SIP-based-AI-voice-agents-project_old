@@ -1,7 +1,7 @@
 output "postgres_exporter_endpoint" {
   description = "PostgreSQL exporter service endpoint"
   value = var.enable_postgres_exporter ? try(
-    "http://${aws_ecs_service.postgres_exporter[0].name}:9187",
+    "http://$${aws_ecs_service.postgres_exporter[0].name}:9187",
     null
   ) : null
 }
@@ -9,7 +9,7 @@ output "postgres_exporter_endpoint" {
 output "redis_exporter_endpoint" {
   description = "Redis exporter service endpoint"
   value = var.enable_redis_exporter ? try(
-    "http://${aws_ecs_service.redis_exporter[0].name}:9121",
+    "http://$${aws_ecs_service.redis_exporter[0].name}:9121",
     null
   ) : null
 }
@@ -17,7 +17,7 @@ output "redis_exporter_endpoint" {
 output "node_exporter_endpoint" {
   description = "Node exporter service endpoint"
   value = var.enable_node_exporter ? try(
-    "http://${aws_ecs_service.node_exporter[0].name}:9100",
+    "http://$${aws_ecs_service.node_exporter[0].name}:9100",
     null
   ) : null
 }
@@ -25,7 +25,7 @@ output "node_exporter_endpoint" {
 output "app_metrics_exporter_endpoint" {
   description = "Application metrics exporter service endpoint"
   value = var.enable_app_metrics_exporter ? try(
-    "http://${aws_ecs_service.app_metrics_exporter[0].name}:9090",
+    "http://$${aws_ecs_service.app_metrics_exporter[0].name}:9090",
     null
   ) : null
 }

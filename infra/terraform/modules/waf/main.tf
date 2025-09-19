@@ -12,7 +12,7 @@ terraform {
 
 # WAF Web ACL
 resource "aws_wafv2_web_acl" "main" {
-  name        = "${var.project_name}-waf-${var.environment}"
+  name        = "$${var.project_name}-waf-$${var.environment}"
   description = "WAF for Invorto Voice AI Platform"
   scope       = "REGIONAL"
 
@@ -44,7 +44,7 @@ resource "aws_wafv2_web_acl" "main" {
 
     visibility_config {
       cloudwatch_metrics_enabled = true
-      metric_name                = "${var.project_name}-RateLimit-${var.environment}"
+      metric_name                = "$${var.project_name}-RateLimit-$${var.environment}"
       sampled_requests_enabled   = true
     }
   }
@@ -95,7 +95,7 @@ resource "aws_wafv2_web_acl" "main" {
 
     visibility_config {
       cloudwatch_metrics_enabled = true
-      metric_name                = "${var.project_name}-SQLInjection-${var.environment}"
+      metric_name                = "$${var.project_name}-SQLInjection-$${var.environment}"
       sampled_requests_enabled   = true
     }
   }
@@ -127,7 +127,7 @@ resource "aws_wafv2_web_acl" "main" {
 
     visibility_config {
       cloudwatch_metrics_enabled = true
-      metric_name                = "${var.project_name}-XSS-${var.environment}"
+      metric_name                = "$${var.project_name}-XSS-$${var.environment}"
       sampled_requests_enabled   = true
     }
   }
@@ -152,7 +152,7 @@ resource "aws_wafv2_web_acl" "main" {
 
       visibility_config {
         cloudwatch_metrics_enabled = true
-        metric_name                = "${var.project_name}-AllowTrustedIPs-${var.environment}"
+        metric_name                = "$${var.project_name}-AllowTrustedIPs-$${var.environment}"
         sampled_requests_enabled   = true
       }
     }
@@ -178,7 +178,7 @@ resource "aws_wafv2_web_acl" "main" {
 
       visibility_config {
         cloudwatch_metrics_enabled = true
-        metric_name                = "${var.project_name}-BlockMaliciousIPs-${var.environment}"
+        metric_name                = "$${var.project_name}-BlockMaliciousIPs-$${var.environment}"
         sampled_requests_enabled   = true
       }
     }
@@ -204,7 +204,7 @@ resource "aws_wafv2_web_acl" "main" {
 
       visibility_config {
         cloudwatch_metrics_enabled = true
-        metric_name                = "${var.project_name}-GeoBlock-${var.environment}"
+        metric_name                = "$${var.project_name}-GeoBlock-$${var.environment}"
         sampled_requests_enabled   = true
       }
     }
@@ -237,7 +237,7 @@ resource "aws_wafv2_web_acl" "main" {
 
     visibility_config {
       cloudwatch_metrics_enabled = true
-      metric_name                = "${var.project_name}-BadBot-${var.environment}"
+      metric_name                = "$${var.project_name}-BadBot-$${var.environment}"
       sampled_requests_enabled   = true
     }
   }
@@ -260,7 +260,7 @@ resource "aws_wafv2_web_acl" "main" {
 
     visibility_config {
       cloudwatch_metrics_enabled = true
-      metric_name                = "${var.project_name}-AWSManagedRulesCommon-${var.environment}"
+      metric_name                = "$${var.project_name}-AWSManagedRulesCommon-$${var.environment}"
       sampled_requests_enabled   = true
     }
   }
@@ -283,7 +283,7 @@ resource "aws_wafv2_web_acl" "main" {
 
     visibility_config {
       cloudwatch_metrics_enabled = true
-      metric_name                = "${var.project_name}-AWSManagedRulesBadInputs-${var.environment}"
+      metric_name                = "$${var.project_name}-AWSManagedRulesBadInputs-$${var.environment}"
       sampled_requests_enabled   = true
     }
   }
@@ -313,7 +313,7 @@ resource "aws_wafv2_web_acl" "main" {
 
   visibility_config {
     cloudwatch_metrics_enabled = true
-    metric_name                = "${var.project_name}-waf-${var.environment}"
+    metric_name                = "$${var.project_name}-waf-$${var.environment}"
     sampled_requests_enabled   = true
   }
 }
@@ -322,7 +322,7 @@ resource "aws_wafv2_web_acl" "main" {
 resource "aws_wafv2_ip_set" "allowed_ips" {
   count = length(var.allowed_ip_addresses) > 0 ? 1 : 0
 
-  name               = "${var.project_name}-allowed-ips-${var.environment}"
+  name               = "$${var.project_name}-allowed-ips-$${var.environment}"
   description        = "Allowed IP addresses for Invorto"
   scope              = "REGIONAL"
   ip_address_version = "IPV4"
@@ -332,7 +332,7 @@ resource "aws_wafv2_ip_set" "allowed_ips" {
 resource "aws_wafv2_ip_set" "blocked_ips" {
   count = length(var.blocked_ip_addresses) > 0 ? 1 : 0
 
-  name               = "${var.project_name}-blocked-ips-${var.environment}"
+  name               = "$${var.project_name}-blocked-ips-$${var.environment}"
   description        = "Blocked IP addresses for Invorto"
   scope              = "REGIONAL"
   ip_address_version = "IPV4"
@@ -347,7 +347,7 @@ resource "aws_wafv2_web_acl_association" "alb" {
 
 # CloudWatch Alarms for WAF metrics
 resource "aws_cloudwatch_metric_alarm" "waf_blocked_requests" {
-  alarm_name          = "${var.project_name}-waf-blocked-requests-${var.environment}"
+  alarm_name          = "$${var.project_name}-waf-blocked-requests-$${var.environment}"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = "2"
   metric_name         = "BlockedRequests"
@@ -375,7 +375,7 @@ resource "aws_wafv2_web_acl_logging_configuration" "main" {
 resource "aws_kinesis_firehose_delivery_stream" "waf_logs" {
   count = var.enable_logging ? 1 : 0
 
-  name        = "${var.project_name}-waf-logs-${var.environment}"
+  name        = "$${var.project_name}-waf-logs-$${var.environment}"
   destination = "s3"
 
   s3_configuration {
@@ -392,7 +392,7 @@ resource "aws_kinesis_firehose_delivery_stream" "waf_logs" {
 resource "aws_iam_role" "firehose_role" {
   count = var.enable_logging ? 1 : 0
 
-  name = "${var.project_name}-waf-firehose-${var.environment}"
+  name = "$${var.project_name}-waf-firehose-$${var.environment}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -411,7 +411,7 @@ resource "aws_iam_role" "firehose_role" {
 resource "aws_iam_role_policy" "firehose_policy" {
   count = var.enable_logging ? 1 : 0
 
-  name = "${var.project_name}-waf-firehose-policy-${var.environment}"
+  name = "$${var.project_name}-waf-firehose-policy-$${var.environment}"
   role = aws_iam_role.firehose_role[0].id
 
   policy = jsonencode({

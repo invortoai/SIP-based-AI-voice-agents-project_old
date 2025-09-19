@@ -1,9 +1,9 @@
 variable "environment" { type = string }
 variable "bucket_prefix" { type = string }
 
-resource "aws_s3_bucket" "recordings" { bucket = "${var.bucket_prefix}-${var.environment}-recordings" }
-resource "aws_s3_bucket" "transcripts" { bucket = "${var.bucket_prefix}-${var.environment}-transcripts" }
-resource "aws_s3_bucket" "metrics" { bucket = "${var.bucket_prefix}-${var.environment}-metrics" }
+resource "aws_s3_bucket" "recordings" { bucket = "$${var.bucket_prefix}-$${var.environment}-recordings" }
+resource "aws_s3_bucket" "transcripts" { bucket = "$${var.bucket_prefix}-${var.environment}-transcripts" }
+resource "aws_s3_bucket" "metrics" { bucket = "$${var.bucket_prefix}-$${var.environment}-metrics" }
 
 # S3 Bucket Lifecycle Policies for Data Retention
 resource "aws_s3_bucket_lifecycle_configuration" "recordings_lifecycle" {

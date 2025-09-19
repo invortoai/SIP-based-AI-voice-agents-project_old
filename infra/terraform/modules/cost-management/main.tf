@@ -11,7 +11,7 @@ locals {
 
 # AWS Budget for Monthly Cost
 resource "aws_budgets_budget" "monthly" {
-  name              = "${local.name_prefix}-monthly-budget"
+  name              = "$${local.name_prefix}-monthly-budget"
   budget_type       = "COST"
   time_unit         = "MONTHLY"
   limit_amount      = var.monthly_budget_amount
@@ -81,7 +81,7 @@ resource "aws_budgets_budget" "daily" {
 
 # AWS Budget for Usage
 resource "aws_budgets_budget" "usage" {
-  name              = "${local.name_prefix}-usage-budget"
+  name              = "$${local.name_prefix}-usage-budget"
   budget_type       = "USAGE"
   time_unit         = "MONTHLY"
   limit_amount      = var.monthly_usage_limit
@@ -104,7 +104,7 @@ resource "aws_budgets_budget" "usage" {
 
 # SNS Topic for Cost Alerts
 resource "aws_sns_topic" "cost_alerts" {
-  name = "${local.name_prefix}-alerts"
+  name = "$${local.name_prefix}-alerts"
   
   tags = local.tags
 }
@@ -205,7 +205,7 @@ resource "aws_cloudwatch_dashboard" "cost" {
 
 # CloudWatch Alarms for Cost Monitoring
 resource "aws_cloudwatch_metric_alarm" "cost_threshold" {
-  alarm_name          = "${local.name_prefix}-cost-threshold"
+  alarm_name          = "$${local.name_prefix}-cost-threshold"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = "1"
   metric_name         = "EstimatedCharges"
@@ -225,7 +225,7 @@ resource "aws_cloudwatch_metric_alarm" "cost_threshold" {
 
 # CloudWatch Alarm for High CPU Usage (Cost Impact)
 resource "aws_cloudwatch_metric_alarm" "high_cpu_cost" {
-  alarm_name          = "${local.name_prefix}-high-cpu-cost"
+  alarm_name          = "$${local.name_prefix}-high-cpu-cost"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = "2"
   metric_name         = "CPUUtilization"
@@ -245,7 +245,7 @@ resource "aws_cloudwatch_metric_alarm" "high_cpu_cost" {
 
 # CloudWatch Alarm for High Memory Usage (Cost Impact)
 resource "aws_cloudwatch_metric_alarm" "high_memory_cost" {
-  alarm_name          = "${local.name_prefix}-high-memory-cost"
+  alarm_name          = "$${local.name_prefix}-high-memory-cost"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = "2"
   metric_name         = "MemoryUtilization"
@@ -266,7 +266,7 @@ resource "aws_cloudwatch_metric_alarm" "high_memory_cost" {
 
 # CloudWatch Alarm for Unused Resources
 resource "aws_cloudwatch_metric_alarm" "unused_resources" {
-  alarm_name          = "${local.name_prefix}-unused-resources"
+  alarm_name          = "$${local.name_prefix}-unused-resources"
   comparison_operator = "LessThanThreshold"
   evaluation_periods  = "4"
   metric_name         = "CPUUtilization"
@@ -333,7 +333,7 @@ resource "aws_cur_report_definition" "cost_report" {
 resource "aws_s3_bucket" "cost_reports" {
   count = var.enable_cost_explorer_reports ? 1 : 0
 
-  bucket = "${local.name_prefix}-reports-${random_string.bucket_suffix.result}"
+  bucket = "$${local.name_prefix}-reports-${random_string.bucket_suffix.result}"
   
   tags = local.tags
 }
@@ -399,7 +399,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "cost_reports" {
 resource "aws_iam_role" "cost_explorer" {
   count = var.enable_cost_explorer_reports ? 1 : 0
 
-  name = "${local.name_prefix}-cost-explorer-role"
+  name = "$${local.name_prefix}-cost-explorer-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -421,7 +421,7 @@ resource "aws_iam_role" "cost_explorer" {
 resource "aws_iam_role_policy" "cost_explorer" {
   count = var.enable_cost_explorer_reports ? 1 : 0
 
-  name = "${local.name_prefix}-cost-explorer-policy"
+  name = "$${local.name_prefix}-cost-explorer-policy"
   role = aws_iam_role.cost_explorer[0].id
 
   policy = jsonencode({

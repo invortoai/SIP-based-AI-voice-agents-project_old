@@ -8,13 +8,13 @@ resource "aws_ecs_cluster" "main" {
   }
   
   tags = {
-    Name = "${var.environment}-invorto-ecs-cluster"
+    Name = "$${var.environment}-invorto-ecs-cluster"
   }
 }
 
 # ECS Task Execution Role
 resource "aws_iam_role" "ecs_task_execution_role" {
-  name = "${var.environment}-invorto-ecs-task-execution-role"
+  name = "$${var.environment}-invorto-ecs-task-execution-role"
   
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -37,7 +37,7 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy" {
 
 # ECS Task Role
 resource "aws_iam_role" "ecs_task_role" {
-  name = "${var.environment}-invorto-ecs-task-role"
+  name = "$${var.environment}-invorto-ecs-task-role"
   
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -55,7 +55,7 @@ resource "aws_iam_role" "ecs_task_role" {
 
 # Security Groups
 resource "aws_security_group" "ecs_tasks" {
-  name_prefix = "${var.environment}-invorto-ecs-"
+  name_prefix = "$${var.environment}-invorto-ecs-"
   vpc_id      = var.vpc_id
   
   ingress {
