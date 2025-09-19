@@ -321,7 +321,6 @@ module "ci_cd" {
 module "backup_dr" {
   source = "./modules/backup-dr"
 
-  project_name                  = var.project_name
   environment                   = var.environment
   aws_region                    = var.aws_region
   enable_cross_region_backup    = var.enable_cross_region_backup
@@ -341,7 +340,6 @@ module "backup_dr" {
 module "cost_management" {
   source = "./modules/cost-management"
 
-  project_name                 = var.project_name
   environment                  = var.environment
   aws_region                   = var.aws_region
   monthly_budget_amount        = var.monthly_budget
