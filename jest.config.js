@@ -31,6 +31,8 @@ module.exports = {
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   testTimeout: 20000,
   verbose: true,
+  runInBand: true,
+  detectOpenHandles: true,
   // Enable ts-jest transform explicitly for TS (ESM-friendly)
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {

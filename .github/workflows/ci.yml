@@ -33,8 +33,11 @@ jobs:
           cache: 'npm'
       
       - name: Install dependencies
-        run: npm ci --workspaces || npm install --workspaces 
-      
+        run: npm ci --workspaces
+
+      - name: Verify workspace structure
+        run: npm ls --workspaces
+
       - name: Run TypeScript type check
         run: npm run typecheck
       
@@ -81,8 +84,14 @@ jobs:
           cache: 'npm'
       
       - name: Install dependencies
-        run: npm ci --workspaces || npm install --workspaces
-      
+        run: npm ci --workspaces
+
+      - name: Verify workspace structure
+        run: npm ls --workspaces
+
+      - name: Verify Jest installation
+        run: npx jest --version
+
       - name: Run database migrations
         env:
           DB_URL: postgresql://test:test@localhost:5432/invorto_test
@@ -94,7 +103,7 @@ jobs:
           NODE_ENV: test
           DB_URL: postgresql://test:test@localhost:5432/invorto_test
           REDIS_URL: redis://localhost:6379
-        run: npm test -- --runInBand --detectOpenHandles
+        run: npm test
       
       - name: Upload coverage reports
         uses: codecov/codecov-action@v3
