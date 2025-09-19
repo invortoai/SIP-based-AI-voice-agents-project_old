@@ -5,10 +5,16 @@
   "description": "Invorto Voice AI Agent Platform - Monorepo",
   "license": "Apache-2.0",
   "workspaces": [
-    "packages/*",
-    "services/*",
-    "sdk/*",
-    "infra/*"
+    "packages/shared",
+    "packages/shared-core",
+    "services/api",
+    "services/realtime",
+    "services/telephony",
+    "services/webhooks",
+    "services/workers",
+    "sdk/browser",
+    "sdk/node",
+    "sdk/python"
   ],
   "engines": {
     "node": ">=20.0.0"
