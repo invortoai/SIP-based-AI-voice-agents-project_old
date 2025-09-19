@@ -318,7 +318,7 @@ module "backup_dr" {
 
   environment                   = var.environment
   aws_region                    = var.aws_region
-  enable_cross_region_backup    = var.enable_cross_region_backup
+  enable_cross_region_backup    = false # Disabled to avoid provider configuration issues
   enable_backup_vault_lock      = var.enable_backup_vault_lock
   backup_vault_lock_days        = var.backup_vault_lock_days
   daily_backup_retention_days   = var.db_backup_retention_days
