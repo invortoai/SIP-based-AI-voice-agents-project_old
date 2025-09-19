@@ -149,11 +149,11 @@ resource "aws_launch_template" "jambonz" {
     name = aws_iam_instance_profile.jambonz.name
   }
 
-  user_data = base64encode(templatefile("${path.module}/user-data.sh", {
+  user_data = base64encode(templatefile("$${path.module}/user-data.sh", {
     environment = var.environment
-    domain     = var.domain
-    redis_url  = var.redis_url
-    db_url     = var.db_url
+    domain      = var.domain
+    redis_url   = var.redis_url
+    db_url      = var.db_url
     secrets_arn = var.secrets_arn
   }))
 
