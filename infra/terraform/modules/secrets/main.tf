@@ -3,19 +3,19 @@ variable "environment" {
 }
 
 resource "aws_secretsmanager_secret" "webhook" {
-  name = "$${var.environment}/webhook_secret"
+  name = "${var.environment}/webhook_secret"
 }
 
 resource "aws_secretsmanager_secret" "jwt" {
-  name = "$${var.environment}/jwt_public_key"
+  name = "${var.environment}/jwt_public_key"
 }
 
 resource "aws_secretsmanager_secret" "deepgram" {
-  name = "$${var.environment}/deepgram_api_key"
+  name = "${var.environment}/deepgram_api_key"
 }
 
 resource "aws_secretsmanager_secret" "openai" {
-  name = "$${var.environment}/openai_api_key"
+  name = "${var.environment}/openai_api_key"
 }
 
 output "secret_arns" {

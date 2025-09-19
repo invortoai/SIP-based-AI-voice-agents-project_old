@@ -13,10 +13,10 @@ output "public_subnets" {
   value       = module.vpc.public_subnets
 }
 
-output "alb_dns_name" {
-  description = "ALB DNS name"
-  value       = module.alb.dns_name
-}
+# output "alb_dns_name" {
+#   description = "ALB DNS name"
+#   value       = module.alb.dns_name
+# }
 
 output "redis_endpoint" {
   description = "Redis ElastiCache endpoint"
@@ -28,7 +28,7 @@ output "s3_buckets" {
   value       = module.s3.bucket_names
 }
 
-output "ecs_cluster_name" {
-  description = "ECS cluster name"
-  value       = module.ecs_cluster.name
-}
+# output "ecs_cluster_name" {
+#   description = "ECS cluster name"
+#   value       = module.ecs_cluster.name
+# }

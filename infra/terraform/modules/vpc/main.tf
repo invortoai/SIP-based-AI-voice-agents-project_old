@@ -31,7 +31,7 @@ resource "aws_subnet" "private" {
   availability_zone = var.azs[count.index]
 
   tags = {
-    Name = "$${var.environment}-private-$${var.azs[count.index]}"
+    Name = "${var.environment}-private-${var.azs[count.index]}"
     Type = "Private"
   }
 }
@@ -41,7 +41,7 @@ resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
   tags = {
-    Name = "$${var.environment}-invorto-igw"
+    Name = "${var.environment}-invorto-igw"
   }
 }
 
@@ -50,7 +50,7 @@ resource "aws_eip" "nat" {
   domain = "vpc"
 
   tags = {
-    Name = "$${var.environment}-invorto-nat-eip"
+    Name = "${var.environment}-invorto-nat-eip"
   }
 }
 
@@ -59,7 +59,7 @@ resource "aws_nat_gateway" "main" {
   subnet_id     = aws_subnet.public[0].id
 
   tags = {
-    Name = "$${var.environment}-invorto-nat"
+    Name = "${var.environment}-invorto-nat"
   }
 
   depends_on = [aws_internet_gateway.main]
@@ -75,7 +75,7 @@ resource "aws_route_table" "public" {
   }
 
   tags = {
-    Name = "$${var.environment}-public-rt"
+    Name = "${var.environment}-public-rt"
   }
 }
 
@@ -88,7 +88,7 @@ resource "aws_route_table" "private" {
   }
 
   tags = {
-    Name = "$${var.environment}-private-rt"
+    Name = "${var.environment}-private-rt"
   }
 }
 
