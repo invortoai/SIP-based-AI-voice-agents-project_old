@@ -4,40 +4,40 @@
 locals {
   name_prefix = "invorto-cost"
   tags = merge(var.tags, {
-    Service = "cost-management"
+    Service   = "cost-management"
     Component = "governance"
   })
 }
 
 # AWS Budget for Monthly Cost
 resource "aws_budgets_budget" "monthly" {
-  name              = "${local.name_prefix}-monthly-budget"
-  budget_type       = "COST"
-  time_unit         = "MONTHLY"
-  limit_amount      = var.monthly_budget_amount
-  limit_unit        = "USD"
+  name         = "${local.name_prefix}-monthly-budget"
+  budget_type  = "COST"
+  time_unit    = "MONTHLY"
+  limit_amount = var.monthly_budget_amount
+  limit_unit   = "USD"
 
   notification {
     comparison_operator        = "GREATER_THAN"
-    threshold                 = 80
-    threshold_type            = "PERCENTAGE"
-    notification_type         = "ACTUAL"
+    threshold                  = 80
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "ACTUAL"
     subscriber_email_addresses = var.budget_notification_emails
   }
 
   notification {
     comparison_operator        = "GREATER_THAN"
-    threshold                 = 100
-    threshold_type            = "PERCENTAGE"
-    notification_type         = "ACTUAL"
+    threshold                  = 100
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "ACTUAL"
     subscriber_email_addresses = var.budget_notification_emails
   }
 
   notification {
     comparison_operator        = "GREATER_THAN"
-    threshold                 = 120
-    threshold_type            = "PERCENTAGE"
-    notification_type         = "ACTUAL"
+    threshold                  = 120
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "ACTUAL"
     subscriber_email_addresses = var.budget_notification_emails
   }
 
@@ -50,25 +50,25 @@ resource "aws_budgets_budget" "monthly" {
 
 # AWS Budget for Daily Cost
 resource "aws_budgets_budget" "daily" {
-  name              = "${local.name_prefix}-daily-budget"
-  budget_type       = "COST"
-  time_unit         = "DAILY"
-  limit_amount      = var.daily_budget_amount
-  limit_unit        = "USD"
+  name         = "${local.name_prefix}-daily-budget"
+  budget_type  = "COST"
+  time_unit    = "DAILY"
+  limit_amount = var.daily_budget_amount
+  limit_unit   = "USD"
 
   notification {
     comparison_operator        = "GREATER_THAN"
-    threshold                 = 80
-    threshold_type            = "PERCENTAGE"
-    notification_type         = "ACTUAL"
+    threshold                  = 80
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "ACTUAL"
     subscriber_email_addresses = var.budget_notification_emails
   }
 
   notification {
     comparison_operator        = "GREATER_THAN"
-    threshold                 = 100
-    threshold_type            = "PERCENTAGE"
-    notification_type         = "ACTUAL"
+    threshold                  = 100
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "ACTUAL"
     subscriber_email_addresses = var.budget_notification_emails
   }
 
@@ -81,17 +81,17 @@ resource "aws_budgets_budget" "daily" {
 
 # AWS Budget for Usage
 resource "aws_budgets_budget" "usage" {
-  name              = "${local.name_prefix}-usage-budget"
-  budget_type       = "USAGE"
-  time_unit         = "MONTHLY"
-  limit_amount      = var.monthly_usage_limit
-  limit_unit        = "GB-MONTHS"
+  name         = "${local.name_prefix}-usage-budget"
+  budget_type  = "USAGE"
+  time_unit    = "MONTHLY"
+  limit_amount = var.monthly_usage_limit
+  limit_unit   = "GB-MONTHS"
 
   notification {
     comparison_operator        = "GREATER_THAN"
-    threshold                 = 80
-    threshold_type            = "PERCENTAGE"
-    notification_type         = "ACTUAL"
+    threshold                  = 80
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "ACTUAL"
     subscriber_email_addresses = var.budget_notification_emails
   }
 
@@ -105,7 +105,7 @@ resource "aws_budgets_budget" "usage" {
 # SNS Topic for Cost Alerts
 resource "aws_sns_topic" "cost_alerts" {
   name = "${local.name_prefix}-alerts"
-  
+
   tags = local.tags
 }
 
@@ -305,27 +305,27 @@ resource "aws_cur_report_definition" "cost_report" {
   count = var.enable_cost_explorer_reports ? 1 : 0
 
   report_name                = "${local.name_prefix}-cost-report"
-  time_unit                 = "DAILY"
-  format                    = "Parquet"
-  compression               = "GZIP"
+  time_unit                  = "DAILY"
+  format                     = "Parquet"
+  compression                = "GZIP"
   additional_schema_elements = ["RESOURCES"]
-  s3_bucket                 = aws_s3_bucket.cost_reports[0].id
-  s3_region                 = var.aws_region
-  additional_artifacts      = ["ATHENA"]
-  refresh_closed_reports    = true
-  report_versioning         = "OVERWRITE_REPORT"
+  s3_bucket                  = aws_s3_bucket.cost_reports[0].id
+  s3_region                  = var.aws_region
+  additional_artifacts       = ["ATHENA"]
+  refresh_closed_reports     = true
+  report_versioning          = "OVERWRITE_REPORT"
 
   report_definition {
-    report_name = "${local.name_prefix}-cost-report"
-    time_unit  = "DAILY"
-    format     = "Parquet"
-    compression = "GZIP"
+    report_name                = "${local.name_prefix}-cost-report"
+    time_unit                  = "DAILY"
+    format                     = "Parquet"
+    compression                = "GZIP"
     additional_schema_elements = ["RESOURCES"]
-    s3_bucket = aws_s3_bucket.cost_reports[0].id
-    s3_region = var.aws_region
-    additional_artifacts = ["ATHENA"]
-    refresh_closed_reports = true
-    report_versioning = "OVERWRITE_REPORT"
+    s3_bucket                  = aws_s3_bucket.cost_reports[0].id
+    s3_region                  = var.aws_region
+    additional_artifacts       = ["ATHENA"]
+    refresh_closed_reports     = true
+    report_versioning          = "OVERWRITE_REPORT"
   }
 }
 
@@ -334,7 +334,7 @@ resource "aws_s3_bucket" "cost_reports" {
   count = var.enable_cost_explorer_reports ? 1 : 0
 
   bucket = "${local.name_prefix}-reports-${random_string.bucket_suffix.result}"
-  
+
   tags = local.tags
 }
 
@@ -350,7 +350,7 @@ resource "aws_s3_bucket_versioning" "cost_reports" {
   count = var.enable_cost_explorer_reports ? 1 : 0
 
   bucket = aws_s3_bucket.cost_reports[0].id
-  
+
   versioning_configuration {
     status = "Enabled"
   }

@@ -12,7 +12,7 @@ variable "target_group_arn" { type = string }
 variable "log_group" { type = string }
 
 resource "aws_iam_role" "task_role" {
-  name               = "${var.service_name}-task-role"
+  name = "${var.service_name}-task-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -26,7 +26,7 @@ resource "aws_iam_role" "task_role" {
 }
 
 resource "aws_iam_role" "execution_role" {
-  name               = "${var.service_name}-exec-role"
+  name = "${var.service_name}-exec-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -82,8 +82,8 @@ resource "aws_ecs_service" "svc" {
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets         = var.subnets
-    security_groups = var.security_groups
+    subnets          = var.subnets
+    security_groups  = var.security_groups
     assign_public_ip = false
   }
 

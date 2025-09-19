@@ -4,7 +4,7 @@
 locals {
   name_prefix = "invorto-monitoring"
   tags = merge(var.tags, {
-    Service = "monitoring"
+    Service   = "monitoring"
     Component = "observability"
   })
 }
@@ -12,7 +12,7 @@ locals {
 # SNS Topic for Alerts
 resource "aws_sns_topic" "alerts" {
   name = "${local.name_prefix}-alerts"
-  
+
   tags = local.tags
 }
 

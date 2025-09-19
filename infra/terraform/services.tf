@@ -32,7 +32,7 @@ resource "aws_ecs_task_definition" "telephony" {
   cpu                      = var.telephony_cpu
   memory                   = var.telephony_memory
   execution_role_arn       = aws_iam_role.ecs_execution.arn
-  task_role_arn           = aws_iam_role.telephony_task_role.arn
+  task_role_arn            = aws_iam_role.telephony_task_role.arn
 
   container_definitions = jsonencode([
     {
@@ -93,7 +93,7 @@ resource "aws_ecs_task_definition" "telephony" {
       }
 
       healthCheck = {
-        command = ["CMD-SHELL", "curl -f http://localhost:8085/health || exit 1"]
+        command  = ["CMD-SHELL", "curl -f http://localhost:8085/health || exit 1"]
         interval = 30
         timeout  = 5
         retries  = 3

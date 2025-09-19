@@ -15,12 +15,12 @@ resource "aws_ecs_task_definition" "postgres_exporter" {
   count = var.enable_postgres_exporter ? 1 : 0
 
   family                   = "$${var.project_name}-postgres-exporter-${var.environment}"
-  network_mode            = "awsvpc"
+  network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                     = 256
-  memory                  = 512
-  execution_role_arn      = var.execution_role_arn
-  task_role_arn           = var.task_role_arn
+  cpu                      = 256
+  memory                   = 512
+  execution_role_arn       = var.execution_role_arn
+  task_role_arn            = var.task_role_arn
 
   container_definitions = jsonencode([
     {
@@ -114,12 +114,12 @@ resource "aws_ecs_task_definition" "redis_exporter" {
   count = var.enable_redis_exporter ? 1 : 0
 
   family                   = "$${var.project_name}-redis-exporter-$${var.environment}"
-  network_mode            = "awsvpc"
+  network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                     = 256
-  memory                  = 512
-  execution_role_arn      = var.execution_role_arn
-  task_role_arn           = var.task_role_arn
+  cpu                      = 256
+  memory                   = 512
+  execution_role_arn       = var.execution_role_arn
+  task_role_arn            = var.task_role_arn
 
   container_definitions = jsonencode([
     {
@@ -221,12 +221,12 @@ resource "aws_ecs_task_definition" "node_exporter" {
   count = var.enable_node_exporter ? 1 : 0
 
   family                   = "$${var.project_name}-node-exporter-$${var.environment}"
-  network_mode            = "awsvpc"
+  network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                     = 256
-  memory                  = 512
-  execution_role_arn      = var.execution_role_arn
-  task_role_arn           = var.task_role_arn
+  cpu                      = 256
+  memory                   = 512
+  execution_role_arn       = var.execution_role_arn
+  task_role_arn            = var.task_role_arn
 
   container_definitions = jsonencode([
     {
@@ -313,12 +313,12 @@ resource "aws_ecs_task_definition" "app_metrics_exporter" {
   count = var.enable_app_metrics_exporter ? 1 : 0
 
   family                   = "$${var.project_name}-app-metrics-exporter-$${var.environment}"
-  network_mode            = "awsvpc"
+  network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                     = 256
-  memory                  = 512
-  execution_role_arn      = var.execution_role_arn
-  task_role_arn           = var.task_role_arn
+  cpu                      = 256
+  memory                   = 512
+  execution_role_arn       = var.execution_role_arn
+  task_role_arn            = var.task_role_arn
 
   container_definitions = jsonencode([
     {

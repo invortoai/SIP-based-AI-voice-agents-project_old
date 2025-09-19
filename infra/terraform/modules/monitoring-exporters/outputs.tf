@@ -97,9 +97,9 @@ output "app_metrics_exporter_service_name" {
 output "security_groups" {
   description = "Security groups created for exporters"
   value = {
-    postgres_exporter     = var.enable_postgres_exporter ? try(aws_security_group.postgres_exporter[0].id, null) : null
-    redis_exporter        = var.enable_redis_exporter ? try(aws_security_group.redis_exporter[0].id, null) : null
-    node_exporter         = var.enable_node_exporter ? try(aws_security_group.node_exporter[0].id, null) : null
-    app_metrics_exporter  = var.enable_app_metrics_exporter ? try(aws_security_group.app_metrics_exporter[0].id, null) : null
+    postgres_exporter    = var.enable_postgres_exporter ? try(aws_security_group.postgres_exporter[0].id, null) : null
+    redis_exporter       = var.enable_redis_exporter ? try(aws_security_group.redis_exporter[0].id, null) : null
+    node_exporter        = var.enable_node_exporter ? try(aws_security_group.node_exporter[0].id, null) : null
+    app_metrics_exporter = var.enable_app_metrics_exporter ? try(aws_security_group.app_metrics_exporter[0].id, null) : null
   }
 }

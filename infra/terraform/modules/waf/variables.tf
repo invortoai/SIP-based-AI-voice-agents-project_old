@@ -54,7 +54,7 @@ variable "blocked_ip_addresses" {
 variable "bad_bot_user_agents" {
   description = "Bad bot user agent strings to block"
   type        = list(string)
-  default     = [
+  default = [
     "bot",
     "crawler",
     "spider",
