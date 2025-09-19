@@ -18,11 +18,16 @@ resource "aws_secretsmanager_secret" "openai" {
   name = "${var.environment}/openai_api_key"
 }
 
+resource "aws_secretsmanager_secret" "jambonz" {
+  name = "${var.environment}/jambonz_credentials"
+}
+
 output "secret_arns" {
   value = {
     webhook  = aws_secretsmanager_secret.webhook.arn
     jwt      = aws_secretsmanager_secret.jwt.arn
     deepgram = aws_secretsmanager_secret.deepgram.arn
     openai   = aws_secretsmanager_secret.openai.arn
+    jambonz  = aws_secretsmanager_secret.jambonz.arn
   }
 }
