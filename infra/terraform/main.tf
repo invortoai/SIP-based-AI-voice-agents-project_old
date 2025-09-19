@@ -77,7 +77,7 @@ module "jambonz_media" {
   root_volume_size = var.jambonz_root_volume_size
   domain          = var.jambonz_domain
   redis_url       = "redis://${module.redis.endpoint}:6379"
-  db_url          = "postgresql://${var.db_username}:${var.db_password}@${module.rds.endpoint}:5432/${var.db_name}"
+  db_url          = "postgresql://${var.db_username}:${var.db_password}@${aws_db_instance.main.endpoint}:5432/${var.db_name}"
   secrets_arn     = module.secrets.jambonz_secret_arn
   sip_allowed_cidrs = var.jambonz_sip_allowed_cidrs
   admin_allowed_cidrs = var.jambonz_admin_allowed_cidrs
@@ -117,10 +117,10 @@ module "s3" {
 
 # Telephony Service S3 Bucket for call recordings and logs
 resource "aws_s3_bucket" "telephony_data" {
-  bucket = "$${var.environment}-invorto-telephony-data"
+  bucket = "${var.environment}-invorto-telephony-data"
 
   tags = {
-    Name        = "$${var.environment}-invorto-telephony-data"
+    Name        = "${var.environment}-invorto-telephony-data"
     Environment = var.environment
     Service     = "telephony"
     Purpose     = "call-recordings-logs"
@@ -192,7 +192,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "telephony_data" {
 
 # IAM Role for Telephony Service
 resource "aws_iam_role" "telephony_task_role" {
-  name = "$${var.environment}-telephony-task-role"
+  name = "${var.environment}-telephony-task-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -214,7 +214,7 @@ resource "aws_iam_role" "telephony_task_role" {
 }
 
 resource "aws_iam_role_policy" "telephony_task_policy" {
-  name = "$${var.environment}-telephony-task-policy"
+  name = "${var.environment}-telephony-task-policy"
   role = aws_iam_role.telephony_task_role.id
 
   policy = jsonencode({
@@ -230,7 +230,7 @@ resource "aws_iam_role_policy" "telephony_task_policy" {
         ]
         Resource = [
           aws_s3_bucket.telephony_data.arn,
-          "$${aws_s3_bucket.telephony_data.arn}/*"
+          "${aws_s3_bucket.telephony_data.arn}/*"
         ]
       },
       {
@@ -267,6 +267,7 @@ module "secrets" {
 module "waf" {
   source = "./modules/waf"
 
+  project_name    = var.project_name
   environment     = var.environment
   aws_region      = var.aws_region
   alb_arn         = module.alb.alb_arn
@@ -302,6 +303,7 @@ module "monitoring" {
 module "ci_cd" {
   source = "./modules/ci-cd"
   
+  project_name = var.project_name
   environment = var.environment
   aws_region = var.aws_region
   ecs_cluster_name = module.ecs_cluster.cluster_name
@@ -320,6 +322,7 @@ module "ci_cd" {
 module "backup_dr" {
   source = "./modules/backup-dr"
   
+  project_name = var.project_name
   environment = var.environment
   aws_region = var.aws_region
   enable_cross_region_backup = var.enable_cross_region_backup
@@ -339,6 +342,7 @@ module "backup_dr" {
 module "cost_management" {
   source = "./modules/cost-management"
   
+  project_name = var.project_name
   environment = var.environment
   aws_region = var.aws_region
   monthly_budget_amount = var.monthly_budget
@@ -362,7 +366,7 @@ module "cost_management" {
 module "service_mesh" {
   source = "./modules/service-mesh"
 
-  cluster_name = module.eks.cluster_name
+  cluster_name = module.ecs_cluster.cluster_name
   enable_istio = var.enable_service_mesh
   istio_version = var.istio_version
   enable_kiali = var.enable_kiali
@@ -383,20 +387,21 @@ module "service_mesh" {
 module "monitoring_exporters" {
   source = "./modules/monitoring-exporters"
 
+  project_name    = var.project_name
   environment     = var.environment
   aws_region      = var.aws_region
   vpc_id         = module.vpc.vpc_id
-  private_subnets = module.vpc.private_subnet_ids
+  private_subnets = module.vpc.private_subnets
   ecs_cluster_id = module.ecs_cluster.cluster_id
-  execution_role_arn = aws_iam_role.ecs_execution.arn
-  task_role_arn = aws_iam_role.ecs_task.arn
-  monitoring_security_groups = [aws_security_group.monitoring.id]
+  execution_role_arn = aws_iam_role.telephony_task_role.arn
+  task_role_arn = aws_iam_role.telephony_task_role.arn
+  monitoring_security_groups = []
 
   # PostgreSQL
   enable_postgres_exporter = var.enable_postgres_exporter
-  db_endpoint = aws_db_instance.main.endpoint
+  db_endpoint = ""
   db_username = var.db_username
-  db_password = random_password.db.result
+  db_password = var.db_password
   db_name = var.db_name
 
   # Redis
