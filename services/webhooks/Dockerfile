@@ -1,5 +1,5 @@
-# Monorepo-aware Dockerfile using root context and npm workspaces
-# Build context must be repo root (configure in CI/compose)
+# Monorepo-aware Dockerfile using root context and workspace installs
+# Build context must be the repo root (set in compose or CI)
 FROM node:20-alpine AS deps
 WORKDIR /workspace
 
@@ -7,14 +7,29 @@ WORKDIR /workspace
 ARG BUILD_TIMESTAMP
 ENV BUILD_TIMESTAMP=${BUILD_TIMESTAMP}
 
-# Copy root manifests and workspace package.json to allow a single npm ci
+# Copy root package.json first to establish workspace structure
 COPY package.json package-lock.json ./
-COPY packages/*/package.json packages/*/
-COPY services/*/package.json services/*/
-COPY sdk/*/package.json sdk/*/
+
+# Copy all workspace package.json files to enable proper dependency resolution
+COPY packages/shared/package.json packages/shared/
+COPY packages/shared-core/package.json packages/shared-core/
+COPY services/webhooks/package.json services/webhooks/
+COPY services/api/package.json services/api/
+COPY services/realtime/package.json services/realtime/
+COPY services/telephony/package.json services/telephony/
+COPY services/workers/package.json services/workers/
+COPY sdk/browser/package.json sdk/browser/
+COPY sdk/node/package.json sdk/node/
+COPY sdk/python/pyproject.toml sdk/python/
+
+# Copy source files for workspaces that need them for proper dependency resolution
+COPY packages/shared/src packages/shared/src
+COPY packages/shared-core/src packages/shared-core/src
+
+# Install all workspace dependencies
 RUN npm ci || npm install
 
-# Build only this workspace to generate dist
+# Build only this workspace
 FROM deps AS build
 COPY . .
 # Build shared packages first
@@ -22,7 +37,7 @@ RUN npm run -w packages/shared build
 RUN npm run -w packages/shared-core build
 # Then build the service
 RUN npm run -w services/webhooks build
-# Prune dev deps for lean runtime
+# Prune dev deps after build to slim runtime node_modules
 RUN npm prune --omit=dev
 
 # Runtime image
