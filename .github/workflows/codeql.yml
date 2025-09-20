@@ -47,7 +47,7 @@ jobs:
           # Check if Code Scanning is available (requires GitHub Pro/Team/Enterprise)
           if curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
               "https://api.github.com/repos/$GITHUB_REPOSITORY/code-scanning/analyses" \
-              | grep -q "Code scanning is not enabled"; then
+              | grep -q "Code scanning is not enabled for this repository"; then
             echo "Code Scanning not available - skipping analysis"
             echo "skip-analysis=true" >> $GITHUB_OUTPUT
           else
