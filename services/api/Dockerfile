@@ -3,6 +3,10 @@
 FROM node:20-alpine AS deps
 WORKDIR /workspace
 
+# Force cache invalidation by using build timestamp
+ARG BUILD_TIMESTAMP
+ENV BUILD_TIMESTAMP=${BUILD_TIMESTAMP}
+
 # Copy root package.json first to establish workspace structure
 COPY package.json package-lock.json ./
 

@@ -3,6 +3,10 @@
 FROM node:20-alpine AS deps
 WORKDIR /workspace
 
+# Force cache invalidation by using build timestamp
+ARG BUILD_TIMESTAMP
+ENV BUILD_TIMESTAMP=${BUILD_TIMESTAMP}
+
 # Copy root manifests and workspace package.json to allow a single npm ci
 COPY package.json package-lock.json ./
 COPY packages/*/package.json packages/*/
