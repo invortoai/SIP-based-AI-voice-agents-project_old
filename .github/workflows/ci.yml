@@ -265,9 +265,15 @@ jobs:
       
       - name: Deploy to ECS
         run: |
+          # Determine cluster name based on branch
+          CLUSTER_NAME="production-invorto-cluster"
+          if [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            CLUSTER_NAME="staging-invorto-cluster"
+          fi
+
           for service in api realtime webhooks workers telephony; do
             aws ecs update-service \
-              --cluster ${{ github.ref == 'refs/heads/develop' ? 'staging-invorto-cluster' : 'production-invorto-cluster' }} \
+              --cluster $CLUSTER_NAME \
               --service invorto-${service} \
               --force-new-deployment \
               --region ${{ env.AWS_REGION }}
