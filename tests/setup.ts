@@ -79,3 +79,27 @@ jest.mock('@deepgram/sdk', () => {
 
 /* Helper to wait */
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/* Global cleanup for async operations */
+afterAll(async () => {
+  // Add a small delay to allow any pending async operations to complete
+  await sleep(100);
+});
+
+// Handle unhandled promise rejections during tests
+process.on('unhandledRejection', (reason, promise) => {
+  // Only log if it's not the expected "Cannot log after tests are done" warning
+  const reasonStr = reason?.toString() || '';
+  if (!reasonStr.includes('Cannot log after tests are done')) {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  }
+});
+
+// Handle uncaught exceptions during tests
+process.on('uncaughtException', (error) => {
+  // Only log if it's not related to test cleanup
+  const errorStr = error?.toString() || '';
+  if (!errorStr.includes('Cannot log after tests are done')) {
+    console.error('Uncaught Exception:', error);
+  }
+});

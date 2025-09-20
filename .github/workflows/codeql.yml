@@ -6,6 +6,7 @@ on:
     branches: [main, develop]
   schedule:
     - cron: '0 2 * * 1'
+  workflow_dispatch:
 permissions:
   contents: read
   actions: read
@@ -40,7 +41,38 @@ jobs:
       - name: Build workspaces
         run: npm run -ws --if-present build
 
+      - name: Check Code Scanning availability
+        id: code-scanning-check
+        run: |
+          # Check if Code Scanning is available (requires GitHub Pro/Team/Enterprise)
+          if curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/code-scanning/analyses" \
+              | grep -q "Code scanning is not enabled"; then
+            echo "Code Scanning not available - skipping analysis"
+            echo "skip-analysis=true" >> $GITHUB_OUTPUT
+          else
+            echo "Code Scanning available - proceeding with analysis"
+            echo "skip-analysis=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Perform CodeQL Analysis
+        if: steps.code-scanning-check.outputs.skip-analysis != 'true'
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{ matrix.language }}"
+
+      - name: CodeQL Analysis Skipped
+        if: steps.code-scanning-check.outputs.skip-analysis == 'true'
+        run: |
+          echo "⚠️ CodeQL analysis was skipped because Code Scanning is not available on free GitHub plans."
+          echo ""
+          echo "📋 To enable CodeQL analysis, you have these options:"
+          echo "   1. Upgrade to GitHub Pro/Team/Enterprise plan"
+          echo "   2. Use alternative security scanning tools:"
+          echo "      - SonarCloud (free for open source)"
+          echo "      - Snyk (free tier available)"
+          echo "      - ESLint Security plugin"
+          echo "      - npm audit (already configured in CI)"
+          echo ""
+          echo "✅ Your CI/CD pipeline will continue to work normally."
+          echo "✅ Other security scans (Trivy, Semgrep, npm audit) are still running."
