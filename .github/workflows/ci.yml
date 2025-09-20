@@ -249,7 +249,7 @@ jobs:
         run: |
           for service in api realtime webhooks workers telephony; do
             aws ecs update-service \
-              --cluster invorto-staging \
+              --cluster staging-invorto-cluster \
               --service invorto-${service} \
               --force-new-deployment \
               --region ${{ env.AWS_REGION }}
@@ -259,7 +259,7 @@ jobs:
         run: |
           for service in api realtime webhooks workers telephony; do
             aws ecs wait services-stable \
-              --cluster invorto-staging \
+              --cluster staging-invorto-cluster \
               --services invorto-${service} \
               --region ${{ env.AWS_REGION }}
           done
@@ -355,7 +355,7 @@ jobs:
           # Deploy all services
           for service in api realtime webhooks workers telephony; do
             echo "Deploying ${service}..."
-            update_service ${service} invorto-production
+            update_service ${service} production-invorto-cluster
           done
       
       - name: Run smoke tests
