@@ -3,9 +3,11 @@
  * - Ensures predictable test environment
  * - Increases default timeouts for networked tests
  * - Sets sane defaults for env vars expected by services
+ * - Builds workspace packages before running tests
  */
 import path from 'node:path';
 import dotenv from 'dotenv';
+import { execSync } from 'child_process';
 
 // Load test environment from tests/.env.test if present
 try {
@@ -27,6 +29,19 @@ process.env.TELEPHONY_SEMAPHORE_TTL_SEC = process.env.TELEPHONY_SEMAPHORE_TTL_SE
 
 /* Ensure services don't bind network ports during tests */
 process.env.JEST_WORKER_ID = process.env.JEST_WORKER_ID || '1';
+
+/* Build workspace packages before running tests to ensure .js files exist */
+try {
+  console.log('Building workspace packages...');
+  execSync('npm run build', {
+    stdio: 'inherit',
+    cwd: path.resolve(__dirname, '..')
+  });
+  console.log('Workspace packages built successfully');
+} catch (error) {
+  console.error('Failed to build workspace packages:', error);
+  throw error;
+}
 
 /* Redis is mapped to ioredis-mock via jest.config.js moduleNameMapper to avoid real Redis in tests */
 

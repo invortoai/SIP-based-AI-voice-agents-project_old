@@ -25,12 +25,12 @@
     "start": "npm run -ws --if-present start",
     "lint": "npm run -ws --if-present lint",
     "typecheck": "npm run -ws --if-present typecheck",
-    "test": "jest --coverage --runInBand --detectOpenHandles",
+    "test": "jest --coverage --maxWorkers=1 --detectOpenHandles",
     "test:unit": "jest tests/unit",
     "test:integration": "jest tests/integration",
     "test:coverage": "jest --coverage",
     "test:watch": "jest --watch",
-    "test:ci": "jest --runInBand",
+    "test:ci": "jest --maxWorkers=1",
     "db:migrate": "echo 'No database migrations needed for this project'"
   },
   "devDependencies": {
