@@ -3,15 +3,6 @@ name: Build and Push Docker Images
 on:
   push:
     branches: [main]
-    paths:
-      - 'services/**'
-      - 'packages/**'
-      - 'sdk/**'
-      - 'package*.json'
-      - 'tsconfig*.json'
-      - 'Dockerfile'
-      - '.dockerignore'
-      - '.github/workflows/docker-images.yml'
     tags:
       - 'v*.*.*'
   workflow_dispatch:
