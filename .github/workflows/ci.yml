@@ -178,7 +178,7 @@ jobs:
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
     strategy:
       matrix:
-        service: [api, realtime, webhooks, telephony]
+        service: [api, realtime, webhooks, workers, telephony]
     
     steps:
       - uses: actions/checkout@v4
@@ -220,6 +220,7 @@ jobs:
             -t $ECR_REGISTRY/$ECR_REPOSITORY_PREFIX-${{ matrix.service }}:latest \
             -f services/${{ matrix.service }}/Dockerfile \
             --build-arg NODE_ENV=production \
+            --build-arg BUILD_TIMESTAMP=${{ github.run_id }}-${{ github.run_attempt }} \
             .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY_PREFIX-${{ matrix.service }}:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY_PREFIX-${{ matrix.service }}:latest
@@ -246,17 +247,17 @@ jobs:
       
       - name: Deploy to ECS
         run: |
-          for service in api realtime webhooks telephony; do
+          for service in api realtime webhooks workers telephony; do
             aws ecs update-service \
               --cluster invorto-staging \
               --service invorto-${service} \
               --force-new-deployment \
               --region ${{ env.AWS_REGION }}
           done
-      
+
       - name: Wait for deployment
         run: |
-          for service in api realtime webhooks telephony; do
+          for service in api realtime webhooks workers telephony; do
             aws ecs wait services-stable \
               --cluster invorto-staging \
               --services invorto-${service} \
@@ -352,7 +353,7 @@ jobs:
           }
           
           # Deploy all services
-          for service in api realtime webhooks telephony; do
+          for service in api realtime webhooks workers telephony; do
             echo "Deploying ${service}..."
             update_service ${service} invorto-production
           done
