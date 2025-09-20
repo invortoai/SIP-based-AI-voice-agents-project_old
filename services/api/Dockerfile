@@ -28,6 +28,10 @@ RUN npm ci || npm install
 # Build only this workspace
 FROM deps AS build
 COPY . .
+# Build shared packages first
+RUN npm run -w packages/shared build
+RUN npm run -w packages/shared-core build
+# Then build the service
 RUN npm run -w services/api build
 # Prune dev deps after build to slim runtime node_modules
 RUN npm prune --omit=dev
