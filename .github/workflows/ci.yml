@@ -3,8 +3,28 @@ name: CI/CD Pipeline
 on:
   push:
     branches: [main, develop]
+    paths:
+      - 'services/**'
+      - 'packages/**'
+      - 'sdk/**'
+      - 'package*.json'
+      - 'tsconfig*.json'
+      - 'jest.config.js'
+      - '.github/workflows/ci.yml'
+      - 'tests/**'
+      - 'infra/**'
   pull_request:
     branches: [main]
+    paths:
+      - 'services/**'
+      - 'packages/**'
+      - 'sdk/**'
+      - 'package*.json'
+      - 'tsconfig*.json'
+      - 'jest.config.js'
+      - '.github/workflows/ci.yml'
+      - 'tests/**'
+      - 'infra/**'
   workflow_dispatch:
 
 permissions:
