@@ -70,3 +70,4 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           build-args: |
             NODE_ENV=production
+            BUILD_TIMESTAMP=${{ github.run_id }}-${{ github.run_attempt }}
