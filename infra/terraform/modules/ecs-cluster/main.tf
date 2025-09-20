@@ -1,6 +1,6 @@
 # ECS Cluster
 resource "aws_ecs_cluster" "main" {
-  name = "production-invorto-cluster"
+  name = var.environment == "production" ? "production-invorto-cluster" : "${var.environment}-invorto-cluster"
 
   setting {
     name  = "containerInsights"

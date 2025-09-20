@@ -267,7 +267,7 @@ jobs:
         run: |
           for service in api realtime webhooks workers telephony; do
             aws ecs update-service \
-              --cluster staging-invorto-cluster \
+              --cluster ${{ github.ref == 'refs/heads/develop' ? 'staging-invorto-cluster' : 'production-invorto-cluster' }} \
               --service invorto-${service} \
               --force-new-deployment \
               --region ${{ env.AWS_REGION }}
@@ -275,9 +275,14 @@ jobs:
 
       - name: Wait for deployment
         run: |
+          CLUSTER_NAME="production-invorto-cluster"
+          if [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            CLUSTER_NAME="staging-invorto-cluster"
+          fi
+
           for service in api realtime webhooks workers telephony; do
             aws ecs wait services-stable \
-              --cluster staging-invorto-cluster \
+              --cluster $CLUSTER_NAME \
               --services invorto-${service} \
               --region ${{ env.AWS_REGION }}
           done
@@ -314,7 +319,7 @@ jobs:
           update_service() {
             local service=$1
             local cluster=$2
-            
+
             # Get current task definition
             TASK_DEF_ARN=$(aws ecs describe-services \
               --cluster ${cluster} \
@@ -322,14 +327,14 @@ jobs:
               --query 'services[0].taskDefinition' \
               --output text \
               --region ${{ env.AWS_REGION }})
-            
+
             # Get the task definition
             TASK_DEFINITION=$(aws ecs describe-task-definition \
               --task-definition ${TASK_DEF_ARN} \
               --region ${{ env.AWS_REGION }} \
               --query 'taskDefinition' \
               --output json)
-            
+
             # Update the image in the task definition
             NEW_TASK_DEF=$(echo "$TASK_DEFINITION" | \
               jq --arg IMAGE "${ECR_REGISTRY}/${ECR_REPOSITORY_PREFIX}-${service}:${{ github.sha }}" '
@@ -347,14 +352,14 @@ jobs:
                     ]
                   )
               ')
-            
+
             # Register new task definition
             NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
               --cli-input-json "$NEW_TASK_DEF" \
               --region ${{ env.AWS_REGION }} \
               --query 'taskDefinition.taskDefinitionArn' \
               --output text)
-            
+
             # Update service with new task definition
             aws ecs update-service \
               --cluster ${cluster} \
@@ -362,18 +367,24 @@ jobs:
               --task-definition ${NEW_TASK_DEF_ARN} \
               --force-new-deployment \
               --region ${{ env.AWS_REGION }}
-            
+
             # Wait for service to stabilize
             aws ecs wait services-stable \
               --cluster ${cluster} \
               --services invorto-${service} \
               --region ${{ env.AWS_REGION }}
           }
-          
+
+          # Determine cluster name based on branch
+          CLUSTER_NAME="production-invorto-cluster"
+          if [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            CLUSTER_NAME="staging-invorto-cluster"
+          fi
+
           # Deploy all services
           for service in api realtime webhooks workers telephony; do
             echo "Deploying ${service}..."
-            update_service ${service} production-invorto-cluster
+            update_service ${service} $CLUSTER_NAME
           done
       
       - name: Run smoke tests
