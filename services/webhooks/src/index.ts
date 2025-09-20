@@ -13,13 +13,13 @@ import {
   healthChecker,
   createSpan,
   recordException
-} from "@invorto/shared/src/observability.js";
+} from "@invorto/shared/src/observability";
 import {
   requestSanitizer,
   apiKeyManager,
   PIIRedactor,
   getSecret
-} from "@invorto/shared/src/security.js";
+} from "@invorto/shared/src/security";
 
 // Initialize observability (skip top-level await; run async init outside of tests)
 async function initObservability() {
