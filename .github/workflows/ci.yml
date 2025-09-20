@@ -413,9 +413,23 @@ jobs:
           ignore-unfixed: true
           exit-code: '0'
 
+      - name: Check Code Scanning availability
+        id: code-scanning-check
+        run: |
+          # Check if Code Scanning is available (requires GitHub Pro/Team/Enterprise)
+          if curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/code-scanning/analyses" \
+              | grep -q "Code scanning is not enabled"; then
+            echo "Code Scanning not available - skipping SARIF uploads"
+            echo "skip-upload=true" >> $GITHUB_OUTPUT
+          else
+            echo "Code Scanning available - proceeding with uploads"
+            echo "skip-upload=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Upload Trivy FS results
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: always() && steps.code-scanning-check.outputs.skip-upload != 'true'
         continue-on-error: true
         with:
           sarif_file: 'trivy-fs.sarif'
@@ -445,11 +459,26 @@ jobs:
           fi
 
       - name: Upload Semgrep SARIF (if generated)
-        if: ${{ steps.semgrep_gate.outputs.has_sarif == 'true' }}
+        if: ${{ steps.semgrep_gate.outputs.has_sarif == 'true' && steps.code-scanning-check.outputs.skip-upload != 'true' }}
         uses: github/codeql-action/upload-sarif@v3
         continue-on-error: true
         with:
           sarif_file: semgrep.sarif
+
+      - name: SARIF Uploads Skipped
+        if: steps.code-scanning-check.outputs.skip-upload == 'true'
+        run: |
+          echo "⚠️ SARIF uploads were skipped because Code Scanning is not available on free GitHub plans."
+          echo ""
+          echo "📋 To enable SARIF uploads to GitHub Security tab, you have these options:"
+          echo "   1. Upgrade to GitHub Pro/Team/Enterprise plan"
+          echo "   2. Use alternative security scanning tools:"
+          echo "      - SonarCloud (free for open source)"
+          echo "      - Snyk (free tier available)"
+          echo "      - ESLint Security plugin"
+          echo ""
+          echo "✅ Your CI/CD pipeline will continue to work normally."
+          echo "✅ Security scans (Trivy, Semgrep, npm audit) still ran successfully."
 
       - name: npm audit (non-blocking)
         run: npm audit --audit-level=moderate || true

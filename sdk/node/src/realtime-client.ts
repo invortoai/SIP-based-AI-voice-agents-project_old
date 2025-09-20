@@ -170,7 +170,8 @@ export class RealtimeWebSocketClient extends EventEmitter implements RealtimeCon
         });
 
         this.ws.on('close', (code, reason) => {
-          console.log(`WebSocket closed: ${code} - ${reason}`);
+          // Removed console.log to prevent "Cannot log after tests are done" warnings
+          // The close event is still handled properly for reconnection logic
           this.stopHeartbeat();
 
           if (code !== 1000 && !this.isReconnecting && this.reconnectAttempts < this.maxReconnectAttempts) {

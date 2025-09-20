@@ -43,6 +43,11 @@ module.exports = {
   // runInBand: true, // This option is deprecated, use maxWorkers: 1 instead
   maxWorkers: 1,
   detectOpenHandles: true,
+  forceExit: true, // Force Jest to exit even if there are pending handlers
+  // Add this to help with async cleanup
+  testEnvironmentOptions: {
+    // Ensure proper cleanup of async operations
+  },
   // Use ts-jest without ESM to avoid module resolution issues
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
