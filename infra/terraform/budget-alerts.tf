@@ -1,7 +1,7 @@
 # Budget Alerts with CloudWatch
 
 resource "aws_cloudwatch_metric_alarm" "daily_cost_alert" {
-  count                = var.enable_cost_alerts ? 1 : 0
+  count               = var.enable_cost_alerts ? 1 : 0
   alarm_name          = "${var.project_name}-daily-cost-alert-${var.environment}"
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = "1"
@@ -20,7 +20,7 @@ resource "aws_cloudwatch_metric_alarm" "daily_cost_alert" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "monthly_cost_alert" {
-  count                = var.enable_cost_alerts ? 1 : 0
+  count               = var.enable_cost_alerts ? 1 : 0
   alarm_name          = "${var.project_name}-monthly-cost-alert-${var.environment}"
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = "7" # 7 days
@@ -39,7 +39,7 @@ resource "aws_cloudwatch_metric_alarm" "monthly_cost_alert" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "budget_forecast_alert" {
-  count                = var.enable_cost_alerts ? 1 : 0
+  count               = var.enable_cost_alerts ? 1 : 0
   alarm_name          = "${var.project_name}-budget-forecast-alert-${var.environment}"
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = "7" # 7 days
@@ -78,7 +78,7 @@ resource "aws_sns_topic_subscription" "budget_alerts_slack" {
 
 # Custom metrics for application-level cost tracking
 resource "aws_cloudwatch_metric_alarm" "high_cost_per_call" {
-  count                = var.enable_cost_alerts ? 1 : 0
+  count               = var.enable_cost_alerts ? 1 : 0
   alarm_name          = "${var.project_name}-high-cost-per-call-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = "5"
@@ -93,7 +93,7 @@ resource "aws_cloudwatch_metric_alarm" "high_cost_per_call" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "daily_tenant_cost_limit" {
-  count                = var.enable_cost_alerts ? 1 : 0
+  count               = var.enable_cost_alerts ? 1 : 0
   alarm_name          = "${var.project_name}-daily-tenant-cost-limit-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = "1"
