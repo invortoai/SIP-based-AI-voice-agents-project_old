@@ -38,4 +38,6 @@ resource "aws_elasticache_cluster" "this" {
   security_group_ids   = [aws_security_group.redis.id]
 }
 
-output "endpoint" { value = aws_elasticache_cluster.this.configuration_endpoint }
+output "endpoint" {
+  value = "${aws_elasticache_cluster.this.cache_nodes[0].address}:6379"
+}

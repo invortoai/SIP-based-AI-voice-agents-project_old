@@ -8,6 +8,26 @@ locals {
     Component = "telephony"
   })
 }
+# Lookup latest Ubuntu 22.04 (Jammy) AMI in this region
+data "aws_ami" "ubuntu" {
+  most_recent = true
+  owners      = ["099720109477"] # Canonical
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+
+  filter {
+    name   = "root-device-type"
+    values = ["ebs"]
+  }
+}
 
 # Security Group for Jambonz Media Gateway
 resource "aws_security_group" "jambonz" {
@@ -139,10 +159,10 @@ resource "aws_iam_role_policy" "jambonz" {
 # Launch Template for Jambonz instances
 resource "aws_launch_template" "jambonz" {
   name_prefix   = local.name_prefix
-  image_id      = var.ami_id
+  image_id      = var.ami_id != "" ? var.ami_id : data.aws_ami.ubuntu.id
   instance_type = var.instance_type
 
-  key_name = var.key_name
+  key_name = var.key_name != "" ? var.key_name : null
 
   vpc_security_group_ids = [aws_security_group.jambonz.id]
   iam_instance_profile {
@@ -210,7 +230,7 @@ resource "aws_autoscaling_group" "jambonz" {
   mixed_instances_policy {
     instances_distribution {
       on_demand_base_capacity                  = 1
-      on_demand_percentage_above_base_capacity = 0
+      on_demand_percentage_above_base_capacity = 100
       spot_allocation_strategy                 = "capacity-optimized"
     }
 
@@ -222,17 +242,17 @@ resource "aws_autoscaling_group" "jambonz" {
 
       override {
         instance_type     = "c5.2xlarge"
-        weighted_capacity = 1.0
+        weighted_capacity = "2"
       }
 
       override {
         instance_type     = "c5.xlarge"
-        weighted_capacity = 0.8
+        weighted_capacity = "1"
       }
 
       override {
         instance_type     = "c5.4xlarge"
-        weighted_capacity = 1.2
+        weighted_capacity = "4"
       }
     }
   }

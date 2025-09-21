@@ -22,3 +22,13 @@ output "log_group_realtime" {
   description = "CloudWatch log group for Realtime"
   value       = aws_cloudwatch_log_group.realtime.name
 }
+
+output "log_group_webhooks" {
+  description = "CloudWatch log group for Webhooks"
+  value       = aws_cloudwatch_log_group.webhooks.name
+}
+
+output "log_group_workers" {
+  description = "CloudWatch log group for Workers"
+  value       = aws_cloudwatch_log_group.workers.name
+}

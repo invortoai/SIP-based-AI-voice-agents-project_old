@@ -28,9 +28,9 @@ variable "instance_type" {
 }
 
 variable "ami_id" {
-  description = "AMI ID for Jambonz instances (Ubuntu 22.04 LTS recommended)"
+  description = "AMI ID for Jambonz instances (Ubuntu 22.04 LTS recommended). Leave empty to use the latest Ubuntu 22.04 in the current region."
   type        = string
-  default     = "ami-0c7217cdde317cfec" # Ubuntu 22.04 LTS in ap-south-1
+  default     = ""
 }
 
 variable "key_name" {

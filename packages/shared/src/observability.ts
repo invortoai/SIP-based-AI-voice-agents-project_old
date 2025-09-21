@@ -128,7 +128,10 @@ export async function initializeObservability(config: {
     sdk
       .shutdown()
       .then(() => logger.info('OpenTelemetry terminated successfully'))
-      .catch((error) => logger.error('Error terminating OpenTelemetry', error))
+      .catch((error: unknown) => {
+        const err = error instanceof Error ? error : new Error(String(error));
+        logger.error('Error terminating OpenTelemetry', err);
+      })
       .finally(() => process.exit(0));
   });
 }

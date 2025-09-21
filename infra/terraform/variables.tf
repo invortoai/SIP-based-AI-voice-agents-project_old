@@ -322,9 +322,9 @@ variable "jambonz_desired_capacity" {
 }
 
 variable "jambonz_ami_id" {
-  description = "AMI ID for Jambonz instances"
+  description = "AMI ID for Jambonz instances (leave empty to auto-resolve latest Ubuntu 22.04 in-region)"
   type        = string
-  default     = "ami-0c7217cdde317cfec" # Ubuntu 22.04 LTS in ap-south-1
+  default     = ""
 }
 
 variable "jambonz_key_name" {

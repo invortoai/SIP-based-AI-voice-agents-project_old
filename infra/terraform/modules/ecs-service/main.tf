@@ -8,8 +8,36 @@ variable "cpu" { type = number }
 variable "memory" { type = number }
 variable "subnets" { type = list(string) }
 variable "security_groups" { type = list(string) }
-variable "target_group_arn" { type = string }
-variable "log_group" { type = string }
+variable "target_group_arn" {
+  type    = string
+  default = ""
+}
+variable "log_group" {
+  type = string
+}
+variable "desired_count" {
+  type    = number
+  default = 1
+}
+variable "enable_load_balancer" {
+  type    = bool
+  default = true
+}
+variable "aws_region" {
+  type    = string
+  default = "ap-south-1"
+}
+variable "environment" {
+  type    = map(string)
+  default = {}
+}
+variable "secrets" {
+  type = list(object({
+    name      = string
+    valueFrom = string
+  }))
+  default = []
+}
 
 resource "aws_iam_role" "task_role" {
   name = "${var.service_name}-task-role"
@@ -62,11 +90,18 @@ resource "aws_ecs_task_definition" "task" {
         containerPort = var.container_port
         protocol      = "tcp"
       }]
+      environment = [
+        for k, v in var.environment : {
+          name  = k
+          value = v
+        }
+      ]
+      secrets = var.secrets
       logConfiguration = {
         logDriver = "awslogs"
         options = {
           awslogs-group         = var.log_group
-          awslogs-region        = "ap-south-1"
+          awslogs-region        = var.aws_region
           awslogs-stream-prefix = var.service_name
         }
       }
@@ -78,7 +113,7 @@ resource "aws_ecs_service" "svc" {
   name            = var.service_name
   cluster         = var.cluster_arn
   task_definition = aws_ecs_task_definition.task.arn
-  desired_count   = 1
+  desired_count   = var.desired_count
   launch_type     = "FARGATE"
 
   network_configuration {
@@ -87,10 +122,13 @@ resource "aws_ecs_service" "svc" {
     assign_public_ip = false
   }
 
-  load_balancer {
-    target_group_arn = var.target_group_arn
-    container_name   = var.container_name
-    container_port   = var.container_port
+  dynamic "load_balancer" {
+    for_each = var.enable_load_balancer ? [1] : []
+    content {
+      target_group_arn = var.target_group_arn
+      container_name   = var.container_name
+      container_port   = var.container_port
+    }
   }
 
   lifecycle { ignore_changes = [desired_count] }

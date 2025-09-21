@@ -1,0 +1,14 @@
+# Terraform local artifacts
+.terraform/
+.terraform/*
+terraform.tfstate
+terraform.tfstate.*
+crash.log
+crash.*.log
+
+# Sensitive variable files (never commit)
+*.tfvars
+*.tfvars.json
+
+# Ignore plan files
+*.tfplan

@@ -280,22 +280,22 @@ module "secrets" {
 #   log_bucket_arn             = module.s3.logs_bucket_arn
 # }
 
-# CloudWatch alarms and dashboards
-module "monitoring" {
-  source = "./modules/monitoring"
-
-  environment         = var.environment
-  aws_region          = var.aws_region
-  monthly_budget      = var.monthly_budget
-  enable_email_alerts = var.enable_email_alerts
-  alert_email         = var.alert_email
-  enable_slack_alerts = var.enable_slack_alerts
-  slack_webhook_url   = var.slack_webhook_url
-  tags = {
-    Service   = "monitoring"
-    Component = "observability"
-  }
-}
+# CloudWatch alarms and dashboards (temporarily disabled)
+# module "monitoring" {
+#   source = "./modules/monitoring"
+#
+#   environment         = var.environment
+#   aws_region          = var.aws_region
+#   monthly_budget      = var.monthly_budget
+#   enable_email_alerts = var.enable_email_alerts
+#   alert_email         = var.alert_email
+#   enable_slack_alerts = var.enable_slack_alerts
+#   slack_webhook_url   = var.slack_webhook_url
+#   tags = {
+#     Service   = "monitoring"
+#     Component = "observability"
+#   }
+# }
 
 # CI/CD Pipeline Infrastructure - Temporarily disabled due to configuration issues
 # module "ci_cd" {

@@ -213,3 +213,310 @@ data "aws_ecr_repository" "webhooks" {
 #     Service     = "telephony"
 #   }
 # }
+
+# === Application Target Groups (ALB) ===
+resource "aws_lb_target_group" "api" {
+  name        = "${var.environment}-api"
+  port        = 8080
+  protocol    = "HTTP"
+  vpc_id      = module.vpc.vpc_id
+  target_type = "ip"
+
+  health_check {
+    path                = "/health"
+    protocol            = "HTTP"
+    matcher             = "200"
+    interval            = 30
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+    timeout             = 5
+  }
+
+  tags = {
+    Environment = var.environment
+    Service     = "api"
+  }
+}
+
+resource "aws_lb_target_group" "realtime" {
+  name        = "${var.environment}-realtime"
+  port        = 8081
+  protocol    = "HTTP"
+  vpc_id      = module.vpc.vpc_id
+  target_type = "ip"
+
+  health_check {
+    path                = "/health"
+    protocol            = "HTTP"
+    matcher             = "200"
+    interval            = 30
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+    timeout             = 5
+  }
+
+  tags = {
+    Environment = var.environment
+    Service     = "realtime"
+  }
+}
+
+resource "aws_lb_target_group" "webhooks" {
+  name        = "${var.environment}-webhooks"
+  port        = 8082
+  protocol    = "HTTP"
+  vpc_id      = module.vpc.vpc_id
+  target_type = "ip"
+
+  health_check {
+    path                = "/health"
+    protocol            = "HTTP"
+    matcher             = "200"
+    interval            = 30
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+    timeout             = 5
+  }
+
+  tags = {
+    Environment = var.environment
+    Service     = "webhooks"
+  }
+}
+
+# HTTPS listener on ALB with certificate
+resource "aws_lb_listener" "https" {
+  load_balancer_arn = module.alb.alb_arn
+  port              = 443
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-2016-08"
+  certificate_arn   = var.certificate_arn
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api.arn
+  }
+}
+
+# Route realtime paths to realtime TG
+resource "aws_lb_listener_rule" "realtime" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 10
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.realtime.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/realtime*", "/ws*", "/v1/realtime*"]
+    }
+  }
+}
+
+# Route API paths to API TG
+resource "aws_lb_listener_rule" "api_paths" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 20
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/v1/*"]
+    }
+  }
+}
+
+# Route webhooks to webhooks TG
+resource "aws_lb_listener_rule" "webhooks" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 30
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.webhooks.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/webhooks*", "/hooks*"]
+    }
+  }
+}
+
+# === ECS Services using reusable ecs-service module ===
+
+# API Service
+module "svc_api" {
+  source = "./modules/ecs-service"
+
+  cluster_arn      = module.ecs_cluster.cluster_arn
+  cluster_name     = module.ecs_cluster.cluster_name
+  service_name     = "${var.environment}-api"
+  container_name   = "api"
+  container_port   = 8080
+  image            = "${data.aws_ecr_repository.api.repository_url}:latest"
+  cpu              = 512
+  memory           = 1024
+  subnets          = module.vpc.private_subnets
+  security_groups  = [module.ecs_cluster.tasks_sg_id]
+  target_group_arn = aws_lb_target_group.api.arn
+  log_group        = module.ecs_cluster.log_group_api
+  desired_count    = var.api_desired_count
+
+  environment = {
+    NODE_ENV  = "production"
+    PORT      = "8080"
+    REDIS_URL = "redis://${module.redis.endpoint}"
+  }
+
+  secrets = [
+    { name = "SUPABASE_URL",          valueFrom = module.secrets.secret_arns.supabase_url },
+    { name = "SUPABASE_SERVICE_ROLE", valueFrom = module.secrets.secret_arns.supabase_service_role },
+    { name = "OPENAI_API_KEY",        valueFrom = module.secrets.secret_arns.openai },
+    { name = "DEEPGRAM_API_KEY",      valueFrom = module.secrets.secret_arns.deepgram },
+    { name = "WEBHOOK_SECRET",        valueFrom = module.secrets.secret_arns.webhook },
+    { name = "JWT_PUBLIC_KEY",        valueFrom = module.secrets.secret_arns.jwt }
+  ]
+}
+
+# Realtime Service
+module "svc_realtime" {
+  source = "./modules/ecs-service"
+
+  cluster_arn      = module.ecs_cluster.cluster_arn
+  cluster_name     = module.ecs_cluster.cluster_name
+  service_name     = "${var.environment}-realtime"
+  container_name   = "realtime"
+  container_port   = 8081
+  image            = "${data.aws_ecr_repository.realtime.repository_url}:latest"
+  cpu              = 512
+  memory           = 1024
+  subnets          = module.vpc.private_subnets
+  security_groups  = [module.ecs_cluster.tasks_sg_id]
+  target_group_arn = aws_lb_target_group.realtime.arn
+  log_group        = module.ecs_cluster.log_group_realtime
+  desired_count    = var.realtime_desired_count
+
+  environment = {
+    NODE_ENV  = "production"
+    PORT      = "8081"
+    REDIS_URL = "redis://${module.redis.endpoint}"
+  }
+
+  secrets = [
+    { name = "SUPABASE_URL",          valueFrom = module.secrets.secret_arns.supabase_url },
+    { name = "SUPABASE_SERVICE_ROLE", valueFrom = module.secrets.secret_arns.supabase_service_role },
+    { name = "OPENAI_API_KEY",        valueFrom = module.secrets.secret_arns.openai },
+    { name = "DEEPGRAM_API_KEY",      valueFrom = module.secrets.secret_arns.deepgram },
+    { name = "WEBHOOK_SECRET",        valueFrom = module.secrets.secret_arns.webhook },
+    { name = "JWT_PUBLIC_KEY",        valueFrom = module.secrets.secret_arns.jwt }
+  ]
+}
+
+# Webhooks Service
+module "svc_webhooks" {
+  source = "./modules/ecs-service"
+
+  cluster_arn      = module.ecs_cluster.cluster_arn
+  cluster_name     = module.ecs_cluster.cluster_name
+  service_name     = "${var.environment}-webhooks"
+  container_name   = "webhooks"
+  container_port   = 8082
+  image            = "${data.aws_ecr_repository.webhooks.repository_url}:latest"
+  cpu              = 256
+  memory           = 512
+  subnets          = module.vpc.private_subnets
+  security_groups  = [module.ecs_cluster.tasks_sg_id]
+  target_group_arn = aws_lb_target_group.webhooks.arn
+  log_group        = module.ecs_cluster.log_group_webhooks
+  desired_count    = var.webhooks_desired_count
+
+  environment = {
+    NODE_ENV  = "production"
+    PORT      = "8082"
+    REDIS_URL = "redis://${module.redis.endpoint}"
+  }
+
+  secrets = [
+    { name = "SUPABASE_URL",          valueFrom = module.secrets.secret_arns.supabase_url },
+    { name = "SUPABASE_SERVICE_ROLE", valueFrom = module.secrets.secret_arns.supabase_service_role },
+    { name = "OPENAI_API_KEY",        valueFrom = module.secrets.secret_arns.openai },
+    { name = "DEEPGRAM_API_KEY",      valueFrom = module.secrets.secret_arns.deepgram },
+    { name = "WEBHOOK_SECRET",        valueFrom = module.secrets.secret_arns.webhook },
+    { name = "JWT_PUBLIC_KEY",        valueFrom = module.secrets.secret_arns.jwt }
+  ]
+}
+
+# Workers Service (no load balancer)
+module "svc_workers" {
+  source = "./modules/ecs-service"
+
+  cluster_arn         = module.ecs_cluster.cluster_arn
+  cluster_name        = module.ecs_cluster.cluster_name
+  service_name        = "${var.environment}-workers"
+  container_name      = "workers"
+  container_port      = 8083
+  image               = "${data.aws_ecr_repository.workers.repository_url}:latest"
+  cpu                 = 256
+  memory              = 512
+  subnets             = module.vpc.private_subnets
+  security_groups     = [module.ecs_cluster.tasks_sg_id]
+  enable_load_balancer = false
+  log_group           = module.ecs_cluster.log_group_workers
+  desired_count       = var.workers_desired_count
+
+  environment = {
+    NODE_ENV  = "production"
+    PORT      = "8083"
+    REDIS_URL = "redis://${module.redis.endpoint}"
+  }
+
+  secrets = [
+    { name = "SUPABASE_URL",          valueFrom = module.secrets.secret_arns.supabase_url },
+    { name = "SUPABASE_SERVICE_ROLE", valueFrom = module.secrets.secret_arns.supabase_service_role },
+    { name = "OPENAI_API_KEY",        valueFrom = module.secrets.secret_arns.openai },
+    { name = "DEEPGRAM_API_KEY",      valueFrom = module.secrets.secret_arns.deepgram },
+    { name = "WEBHOOK_SECRET",        valueFrom = module.secrets.secret_arns.webhook },
+    { name = "JWT_PUBLIC_KEY",        valueFrom = module.secrets.secret_arns.jwt }
+  ]
+}
+
+# Telephony Service (internal, no ALB)
+module "svc_telephony" {
+  source = "./modules/ecs-service"
+
+  cluster_arn         = module.ecs_cluster.cluster_arn
+  cluster_name        = module.ecs_cluster.cluster_name
+  service_name        = "${var.environment}-telephony-ecs"
+  container_name      = "telephony"
+  container_port      = 8085
+  image               = "${data.aws_ecr_repository.api.repository_url}:latest" # adjust if separate ECR for telephony exists
+  cpu                 = 256
+  memory              = 512
+  subnets             = module.vpc.private_subnets
+  security_groups     = [module.ecs_cluster.tasks_sg_id]
+  enable_load_balancer = false
+  log_group           = "/ecs/${var.environment}/telephony"
+  desired_count       = var.telephony_desired_count
+
+  environment = {
+    NODE_ENV  = "production"
+    PORT      = "8085"
+    REDIS_URL = "redis://${module.redis.endpoint}"
+  }
+
+  secrets = [
+    { name = "SUPABASE_URL",          valueFrom = module.secrets.secret_arns.supabase_url },
+    { name = "SUPABASE_SERVICE_ROLE", valueFrom = module.secrets.secret_arns.supabase_service_role },
+    { name = "OPENAI_API_KEY",        valueFrom = module.secrets.secret_arns.openai },
+    { name = "DEEPGRAM_API_KEY",      valueFrom = module.secrets.secret_arns.deepgram },
+    { name = "WEBHOOK_SECRET",        valueFrom = module.secrets.secret_arns.webhook },
+    { name = "JWT_PUBLIC_KEY",        valueFrom = module.secrets.secret_arns.jwt }
+  ]
+}
