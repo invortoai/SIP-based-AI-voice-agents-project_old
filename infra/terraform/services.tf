@@ -376,12 +376,12 @@ module "svc_api" {
   }
 
   secrets = [
-    { name = "SUPABASE_URL",          valueFrom = module.secrets.secret_arns.supabase_url },
+    { name = "SUPABASE_URL", valueFrom = module.secrets.secret_arns.supabase_url },
     { name = "SUPABASE_SERVICE_ROLE", valueFrom = module.secrets.secret_arns.supabase_service_role },
-    { name = "OPENAI_API_KEY",        valueFrom = module.secrets.secret_arns.openai },
-    { name = "DEEPGRAM_API_KEY",      valueFrom = module.secrets.secret_arns.deepgram },
-    { name = "WEBHOOK_SECRET",        valueFrom = module.secrets.secret_arns.webhook },
-    { name = "JWT_PUBLIC_KEY",        valueFrom = module.secrets.secret_arns.jwt }
+    { name = "OPENAI_API_KEY", valueFrom = module.secrets.secret_arns.openai },
+    { name = "DEEPGRAM_API_KEY", valueFrom = module.secrets.secret_arns.deepgram },
+    { name = "WEBHOOK_SECRET", valueFrom = module.secrets.secret_arns.webhook },
+    { name = "JWT_PUBLIC_KEY", valueFrom = module.secrets.secret_arns.jwt }
   ]
 }
 
@@ -410,12 +410,12 @@ module "svc_realtime" {
   }
 
   secrets = [
-    { name = "SUPABASE_URL",          valueFrom = module.secrets.secret_arns.supabase_url },
+    { name = "SUPABASE_URL", valueFrom = module.secrets.secret_arns.supabase_url },
     { name = "SUPABASE_SERVICE_ROLE", valueFrom = module.secrets.secret_arns.supabase_service_role },
-    { name = "OPENAI_API_KEY",        valueFrom = module.secrets.secret_arns.openai },
-    { name = "DEEPGRAM_API_KEY",      valueFrom = module.secrets.secret_arns.deepgram },
-    { name = "WEBHOOK_SECRET",        valueFrom = module.secrets.secret_arns.webhook },
-    { name = "JWT_PUBLIC_KEY",        valueFrom = module.secrets.secret_arns.jwt }
+    { name = "OPENAI_API_KEY", valueFrom = module.secrets.secret_arns.openai },
+    { name = "DEEPGRAM_API_KEY", valueFrom = module.secrets.secret_arns.deepgram },
+    { name = "WEBHOOK_SECRET", valueFrom = module.secrets.secret_arns.webhook },
+    { name = "JWT_PUBLIC_KEY", valueFrom = module.secrets.secret_arns.jwt }
   ]
 }
 
@@ -444,12 +444,12 @@ module "svc_webhooks" {
   }
 
   secrets = [
-    { name = "SUPABASE_URL",          valueFrom = module.secrets.secret_arns.supabase_url },
+    { name = "SUPABASE_URL", valueFrom = module.secrets.secret_arns.supabase_url },
     { name = "SUPABASE_SERVICE_ROLE", valueFrom = module.secrets.secret_arns.supabase_service_role },
-    { name = "OPENAI_API_KEY",        valueFrom = module.secrets.secret_arns.openai },
-    { name = "DEEPGRAM_API_KEY",      valueFrom = module.secrets.secret_arns.deepgram },
-    { name = "WEBHOOK_SECRET",        valueFrom = module.secrets.secret_arns.webhook },
-    { name = "JWT_PUBLIC_KEY",        valueFrom = module.secrets.secret_arns.jwt }
+    { name = "OPENAI_API_KEY", valueFrom = module.secrets.secret_arns.openai },
+    { name = "DEEPGRAM_API_KEY", valueFrom = module.secrets.secret_arns.deepgram },
+    { name = "WEBHOOK_SECRET", valueFrom = module.secrets.secret_arns.webhook },
+    { name = "JWT_PUBLIC_KEY", valueFrom = module.secrets.secret_arns.jwt }
   ]
 }
 
@@ -457,19 +457,19 @@ module "svc_webhooks" {
 module "svc_workers" {
   source = "./modules/ecs-service"
 
-  cluster_arn         = module.ecs_cluster.cluster_arn
-  cluster_name        = module.ecs_cluster.cluster_name
-  service_name        = "${var.environment}-workers"
-  container_name      = "workers"
-  container_port      = 8083
-  image               = "${data.aws_ecr_repository.workers.repository_url}:latest"
-  cpu                 = 256
-  memory              = 512
-  subnets             = module.vpc.private_subnets
-  security_groups     = [module.ecs_cluster.tasks_sg_id]
+  cluster_arn          = module.ecs_cluster.cluster_arn
+  cluster_name         = module.ecs_cluster.cluster_name
+  service_name         = "${var.environment}-workers"
+  container_name       = "workers"
+  container_port       = 8083
+  image                = "${data.aws_ecr_repository.workers.repository_url}:latest"
+  cpu                  = 256
+  memory               = 512
+  subnets              = module.vpc.private_subnets
+  security_groups      = [module.ecs_cluster.tasks_sg_id]
   enable_load_balancer = false
-  log_group           = module.ecs_cluster.log_group_workers
-  desired_count       = var.workers_desired_count
+  log_group            = module.ecs_cluster.log_group_workers
+  desired_count        = var.workers_desired_count
 
   environment = {
     NODE_ENV  = "production"
@@ -478,12 +478,12 @@ module "svc_workers" {
   }
 
   secrets = [
-    { name = "SUPABASE_URL",          valueFrom = module.secrets.secret_arns.supabase_url },
+    { name = "SUPABASE_URL", valueFrom = module.secrets.secret_arns.supabase_url },
     { name = "SUPABASE_SERVICE_ROLE", valueFrom = module.secrets.secret_arns.supabase_service_role },
-    { name = "OPENAI_API_KEY",        valueFrom = module.secrets.secret_arns.openai },
-    { name = "DEEPGRAM_API_KEY",      valueFrom = module.secrets.secret_arns.deepgram },
-    { name = "WEBHOOK_SECRET",        valueFrom = module.secrets.secret_arns.webhook },
-    { name = "JWT_PUBLIC_KEY",        valueFrom = module.secrets.secret_arns.jwt }
+    { name = "OPENAI_API_KEY", valueFrom = module.secrets.secret_arns.openai },
+    { name = "DEEPGRAM_API_KEY", valueFrom = module.secrets.secret_arns.deepgram },
+    { name = "WEBHOOK_SECRET", valueFrom = module.secrets.secret_arns.webhook },
+    { name = "JWT_PUBLIC_KEY", valueFrom = module.secrets.secret_arns.jwt }
   ]
 }
 
@@ -491,19 +491,19 @@ module "svc_workers" {
 module "svc_telephony" {
   source = "./modules/ecs-service"
 
-  cluster_arn         = module.ecs_cluster.cluster_arn
-  cluster_name        = module.ecs_cluster.cluster_name
-  service_name        = "${var.environment}-telephony-ecs"
-  container_name      = "telephony"
-  container_port      = 8085
-  image               = "${data.aws_ecr_repository.api.repository_url}:latest" # adjust if separate ECR for telephony exists
-  cpu                 = 256
-  memory              = 512
-  subnets             = module.vpc.private_subnets
-  security_groups     = [module.ecs_cluster.tasks_sg_id]
+  cluster_arn          = module.ecs_cluster.cluster_arn
+  cluster_name         = module.ecs_cluster.cluster_name
+  service_name         = "${var.environment}-telephony-ecs"
+  container_name       = "telephony"
+  container_port       = 8085
+  image                = "${data.aws_ecr_repository.api.repository_url}:latest" # adjust if separate ECR for telephony exists
+  cpu                  = 256
+  memory               = 512
+  subnets              = module.vpc.private_subnets
+  security_groups      = [module.ecs_cluster.tasks_sg_id]
   enable_load_balancer = false
-  log_group           = "/ecs/${var.environment}/telephony"
-  desired_count       = var.telephony_desired_count
+  log_group            = "/ecs/${var.environment}/telephony"
+  desired_count        = var.telephony_desired_count
 
   environment = {
     NODE_ENV  = "production"
@@ -512,11 +512,11 @@ module "svc_telephony" {
   }
 
   secrets = [
-    { name = "SUPABASE_URL",          valueFrom = module.secrets.secret_arns.supabase_url },
+    { name = "SUPABASE_URL", valueFrom = module.secrets.secret_arns.supabase_url },
     { name = "SUPABASE_SERVICE_ROLE", valueFrom = module.secrets.secret_arns.supabase_service_role },
-    { name = "OPENAI_API_KEY",        valueFrom = module.secrets.secret_arns.openai },
-    { name = "DEEPGRAM_API_KEY",      valueFrom = module.secrets.secret_arns.deepgram },
-    { name = "WEBHOOK_SECRET",        valueFrom = module.secrets.secret_arns.webhook },
-    { name = "JWT_PUBLIC_KEY",        valueFrom = module.secrets.secret_arns.jwt }
+    { name = "OPENAI_API_KEY", valueFrom = module.secrets.secret_arns.openai },
+    { name = "DEEPGRAM_API_KEY", valueFrom = module.secrets.secret_arns.deepgram },
+    { name = "WEBHOOK_SECRET", valueFrom = module.secrets.secret_arns.webhook },
+    { name = "JWT_PUBLIC_KEY", valueFrom = module.secrets.secret_arns.jwt }
   ]
 }
