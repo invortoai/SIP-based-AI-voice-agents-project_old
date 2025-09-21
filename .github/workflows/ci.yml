@@ -342,11 +342,12 @@ jobs:
           update_service() {
             local service=$1
             local cluster=$2
+            local service_name="production-${service}"
 
             # Get current task definition
             TASK_DEF_ARN=$(aws ecs describe-services \
               --cluster ${cluster} \
-              --services invorto-${service} \
+              --services ${service_name} \
               --query 'services[0].taskDefinition' \
               --output text \
               --region ${{ env.AWS_REGION }})
@@ -386,7 +387,7 @@ jobs:
             # Update service with new task definition
             aws ecs update-service \
               --cluster ${cluster} \
-              --service invorto-${service} \
+              --service ${service_name} \
               --task-definition ${NEW_TASK_DEF_ARN} \
               --force-new-deployment \
               --region ${{ env.AWS_REGION }}
@@ -394,7 +395,7 @@ jobs:
             # Wait for service to stabilize
             aws ecs wait services-stable \
               --cluster ${cluster} \
-              --services invorto-${service} \
+              --services ${service_name} \
               --region ${{ env.AWS_REGION }}
           }
 
@@ -405,7 +406,7 @@ jobs:
           fi
 
           # Deploy all services
-          for service in api realtime webhooks workers telephony; do
+          for service in api realtime webhooks workers telephony-ecs; do
             echo "Deploying ${service}..."
             update_service ${service} $CLUSTER_NAME
           done
