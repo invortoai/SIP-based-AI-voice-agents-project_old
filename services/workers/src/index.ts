@@ -9,11 +9,11 @@ import {
   healthChecker,
   createSpan,
   recordException
-} from "@invorto/shared/src/observability.js";
+} from "@invorto/shared/observability";
 import {
   PIIRedactor,
   getSecret
-} from "@invorto/shared/src/security.js";
+} from "@invorto/shared/security";
 
 // Initialize observability
 await initializeObservability({
