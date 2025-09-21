@@ -149,12 +149,28 @@ jobs:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           role-session-name: invorto-ci-terraform
           aws-region: ${{ env.AWS_REGION }}
+
+      - name: Select Terraform environment and backend key
+        id: tf_env
+        shell: bash
+        run: |
+          BRANCH="${GITHUB_REF##*/}"
+          if [[ "$BRANCH" == "main" ]]; then
+            echo "env=production" >> "$GITHUB_OUTPUT"
+            echo "state_key=prod/terraform.tfstate" >> "$GITHUB_OUTPUT"
+          elif [[ "$BRANCH" == "develop" ]]; then
+            echo "env=staging" >> "$GITHUB_OUTPUT"
+            echo "state_key=staging/terraform.tfstate" >> "$GITHUB_OUTPUT"
+          else
+            echo "env=dev" >> "$GITHUB_OUTPUT"
+            echo "state_key=dev/terraform.tfstate" >> "$GITHUB_OUTPUT"
+          fi
       - name: Terraform fmt (check)
         working-directory: infra/terraform
         run: terraform fmt -check -recursive
       - name: Terraform init
         working-directory: infra/terraform
-        run: terraform init -input=false
+        run: terraform init -input=false -backend-config="key=${{ steps.tf_env.outputs.state_key }}"
       - name: Terraform validate
         working-directory: infra/terraform
         run: terraform validate
@@ -162,8 +178,8 @@ jobs:
       - name: Terraform plan
         working-directory: infra/terraform
         run: |
-          terraform plan -no-color -out=tfplan \
-            -var="environment=dev" \
+          terraform plan -no-color -refresh=false -out=tfplan \
+            -var="environment=${{ steps.tf_env.outputs.env }}" \
             -var="domain_name=api.invortoai.com" \
             -var="deepgram_api_key=${{ secrets.DEEPGRAM_API_KEY }}" \
             -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}" \
@@ -173,7 +189,8 @@ jobs:
             -var="redis_password=${{ secrets.REDIS_PASSWORD }}" \
             -var="certificate_arn=${{ secrets.CERTIFICATE_ARN }}" \
             -var="github_connection_arn=${{ secrets.GITHUB_CONNECTION_ARN }}" \
-            -var="jambonz_key_name=${{ secrets.JAMBONZ_KEY_NAME }}"
+            -var="jambonz_key_name=${{ secrets.JAMBONZ_KEY_NAME }}" \
+            -var="enable_cost_alerts=false"
       - name: Terraform show plan (no secrets)
         working-directory: infra/terraform
         run: terraform show -no-color tfplan > plan.txt

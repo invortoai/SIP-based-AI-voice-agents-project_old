@@ -1,6 +1,7 @@
 # Budget Alerts with CloudWatch
 
 resource "aws_cloudwatch_metric_alarm" "daily_cost_alert" {
+  count                = var.enable_cost_alerts ? 1 : 0
   alarm_name          = "${var.project_name}-daily-cost-alert-${var.environment}"
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = "1"
@@ -10,8 +11,8 @@ resource "aws_cloudwatch_metric_alarm" "daily_cost_alert" {
   statistic           = "Maximum"
   threshold           = var.monthly_budget / 30 # Daily budget threshold
   alarm_description   = "This metric monitors daily estimated charges"
-  alarm_actions       = [aws_sns_topic.budget_alerts.arn]
-  ok_actions          = [aws_sns_topic.budget_alerts.arn]
+  alarm_actions       = [aws_sns_topic.budget_alerts[0].arn]
+  ok_actions          = [aws_sns_topic.budget_alerts[0].arn]
 
   dimensions = {
     Currency = "USD"
@@ -19,6 +20,7 @@ resource "aws_cloudwatch_metric_alarm" "daily_cost_alert" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "monthly_cost_alert" {
+  count                = var.enable_cost_alerts ? 1 : 0
   alarm_name          = "${var.project_name}-monthly-cost-alert-${var.environment}"
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = "7" # 7 days
@@ -28,8 +30,8 @@ resource "aws_cloudwatch_metric_alarm" "monthly_cost_alert" {
   statistic           = "Maximum"
   threshold           = var.monthly_budget * 0.8 # 80% of monthly budget
   alarm_description   = "This metric monitors weekly estimated charges (80% of monthly budget)"
-  alarm_actions       = [aws_sns_topic.budget_alerts.arn]
-  ok_actions          = [aws_sns_topic.budget_alerts.arn]
+  alarm_actions       = [aws_sns_topic.budget_alerts[0].arn]
+  ok_actions          = [aws_sns_topic.budget_alerts[0].arn]
 
   dimensions = {
     Currency = "USD"
@@ -37,6 +39,7 @@ resource "aws_cloudwatch_metric_alarm" "monthly_cost_alert" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "budget_forecast_alert" {
+  count                = var.enable_cost_alerts ? 1 : 0
   alarm_name          = "${var.project_name}-budget-forecast-alert-${var.environment}"
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = "7" # 7 days
@@ -46,8 +49,8 @@ resource "aws_cloudwatch_metric_alarm" "budget_forecast_alert" {
   statistic           = "Maximum"
   threshold           = var.monthly_budget * 0.9 # 90% of monthly budget
   alarm_description   = "This metric monitors forecasted budget usage"
-  alarm_actions       = [aws_sns_topic.budget_alerts.arn]
-  ok_actions          = [aws_sns_topic.budget_alerts.arn]
+  alarm_actions       = [aws_sns_topic.budget_alerts[0].arn]
+  ok_actions          = [aws_sns_topic.budget_alerts[0].arn]
 
   dimensions = {
     Currency = "USD"
@@ -55,25 +58,27 @@ resource "aws_cloudwatch_metric_alarm" "budget_forecast_alert" {
 }
 
 resource "aws_sns_topic" "budget_alerts" {
-  name = "${var.project_name}-budget-alerts-${var.environment}"
+  count = var.enable_cost_alerts ? 1 : 0
+  name  = "${var.project_name}-budget-alerts-${var.environment}"
 }
 
 resource "aws_sns_topic_subscription" "budget_alerts_email" {
-  count     = var.alert_email != "" ? 1 : 0
-  topic_arn = aws_sns_topic.budget_alerts.arn
+  count     = var.enable_cost_alerts && var.alert_email != "" ? 1 : 0
+  topic_arn = aws_sns_topic.budget_alerts[0].arn
   protocol  = "email"
   endpoint  = var.alert_email
 }
 
 resource "aws_sns_topic_subscription" "budget_alerts_slack" {
-  count     = var.slack_webhook_url != "" ? 1 : 0
-  topic_arn = aws_sns_topic.budget_alerts.arn
+  count     = var.enable_cost_alerts && var.slack_webhook_url != "" ? 1 : 0
+  topic_arn = aws_sns_topic.budget_alerts[0].arn
   protocol  = "https"
   endpoint  = var.slack_webhook_url
 }
 
 # Custom metrics for application-level cost tracking
 resource "aws_cloudwatch_metric_alarm" "high_cost_per_call" {
+  count                = var.enable_cost_alerts ? 1 : 0
   alarm_name          = "${var.project_name}-high-cost-per-call-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = "5"
@@ -83,11 +88,12 @@ resource "aws_cloudwatch_metric_alarm" "high_cost_per_call" {
   statistic           = "Average"
   threshold           = 5.0 # INR 5 per call
   alarm_description   = "This metric monitors high cost per call"
-  alarm_actions       = [aws_sns_topic.budget_alerts.arn]
-  ok_actions          = [aws_sns_topic.budget_alerts.arn]
+  alarm_actions       = [aws_sns_topic.budget_alerts[0].arn]
+  ok_actions          = [aws_sns_topic.budget_alerts[0].arn]
 }
 
 resource "aws_cloudwatch_metric_alarm" "daily_tenant_cost_limit" {
+  count                = var.enable_cost_alerts ? 1 : 0
   alarm_name          = "${var.project_name}-daily-tenant-cost-limit-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = "1"
@@ -97,6 +103,6 @@ resource "aws_cloudwatch_metric_alarm" "daily_tenant_cost_limit" {
   statistic           = "Sum"
   threshold           = var.daily_cost_limit # Configurable daily cost limit
   alarm_description   = "This metric monitors daily tenant cost limits"
-  alarm_actions       = [aws_sns_topic.budget_alerts.arn]
-  ok_actions          = [aws_sns_topic.budget_alerts.arn]
+  alarm_actions       = [aws_sns_topic.budget_alerts[0].arn]
+  ok_actions          = [aws_sns_topic.budget_alerts[0].arn]
 }
