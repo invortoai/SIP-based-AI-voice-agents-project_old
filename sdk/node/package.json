@@ -1,5 +1,5 @@
 {
-  "name": "@invorto/server",
+  "name": "@invorto/node",
   "version": "0.1.0",
   "description": "Invorto Voice AI Platform - Node.js Server SDK",
   "main": "dist/index.js",
@@ -13,6 +13,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@invorto/shared": "0.1.0",
     "undici": "^6.19.8",
     "ws": "^8.18.0"
   },

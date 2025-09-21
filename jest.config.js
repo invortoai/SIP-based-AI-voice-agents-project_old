@@ -1,3 +1,5 @@
+const { pathsToModuleNameMapper } = require('ts-jest');
+
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
@@ -23,7 +25,12 @@ module.exports = {
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
   moduleNameMapper: {
-    '^@invorto/shared$': '<rootDir>/tests/mocks/invorto-shared.ts',
+    // Only mock @invorto/shared during actual test runs, not during build
+    ...(process.env.JEST_WORKER_ID ? {
+      '^@invorto/shared$': '<rootDir>/tests/mocks/invorto-shared.ts',
+    } : {
+      '^@invorto/shared$': '<rootDir>/packages/shared/dist/index.js',
+    }),
     '^@invorto/shared/src/observability$': '<rootDir>/packages/shared/src/observability.ts',
     '^@invorto/shared/src/security$': '<rootDir>/packages/shared/src/security.ts',
     '^@invorto/shared/(.*)$': '<rootDir>/packages/shared/src/$1',
