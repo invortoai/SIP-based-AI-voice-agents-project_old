@@ -171,7 +171,7 @@ jobs:
         run: terraform fmt -check -recursive
       - name: Terraform init
         working-directory: infra/terraform
-        run: terraform init -input=false -backend-config="key=${{ steps.tf_env.outputs.state_key }}"
+        run: terraform init -input=false
       - name: Terraform validate
         working-directory: infra/terraform
         run: terraform validate

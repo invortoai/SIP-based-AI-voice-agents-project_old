@@ -8,13 +8,14 @@ resource "aws_ecs_cluster" "main" {
   }
 
   tags = {
-    Name = "production-invorto-ecs-cluster"
+    Name        = "${var.environment}-invorto-ecs-cluster"
+    Environment = var.environment
   }
 }
 
 # ECS Task Execution Role
 resource "aws_iam_role" "ecs_task_execution_role" {
-  name = "production-invorto-ecs-task-execution-role"
+  name = "${var.environment}-invorto-ecs-task-execution-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -37,7 +38,7 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy" {
 
 # ECS Task Role
 resource "aws_iam_role" "ecs_task_role" {
-  name = "production-invorto-ecs-task-role"
+  name = "${var.environment}-invorto-ecs-task-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -55,13 +56,13 @@ resource "aws_iam_role" "ecs_task_role" {
 
 # Security Groups
 resource "aws_security_group" "ecs_tasks" {
-  name_prefix = "dev-invorto-ecs-"
+  name_prefix = "${var.environment}-invorto-ecs-"
   vpc_id      = var.vpc_id
 
   ingress {
     protocol    = "tcp"
     from_port   = 8080
-    to_port     = 8082
+    to_port     = 8085
     cidr_blocks = ["0.0.0.0/0"]
   }
 
@@ -73,47 +74,48 @@ resource "aws_security_group" "ecs_tasks" {
   }
 
   tags = {
-    Name = "production-invorto-ecs-sg"
+    Name        = "${var.environment}-invorto-ecs-sg"
+    Environment = var.environment
   }
 }
 
 # CloudWatch Log Groups
 resource "aws_cloudwatch_log_group" "realtime" {
-  name              = "/ecs/production-invorto-realtime"
+  name              = "/ecs/${var.environment}-invorto-realtime"
   retention_in_days = 7
 
   tags = {
-    Environment = "production"
+    Environment = var.environment
     Service     = "realtime"
   }
 }
 
 resource "aws_cloudwatch_log_group" "api" {
-  name              = "/ecs/production-invorto-api"
+  name              = "/ecs/${var.environment}-invorto-api"
   retention_in_days = 7
 
   tags = {
-    Environment = "production"
+    Environment = var.environment
     Service     = "api"
   }
 }
 
 resource "aws_cloudwatch_log_group" "webhooks" {
-  name              = "/ecs/production-invorto-webhooks"
+  name              = "/ecs/${var.environment}-invorto-webhooks"
   retention_in_days = 7
 
   tags = {
-    Environment = "production"
+    Environment = var.environment
     Service     = "webhooks"
   }
 }
 
 resource "aws_cloudwatch_log_group" "workers" {
-  name              = "/ecs/production-invorto-workers"
+  name              = "/ecs/${var.environment}-invorto-workers"
   retention_in_days = 7
 
   tags = {
-    Environment = "production"
+    Environment = var.environment
     Service     = "workers"
   }
 }

@@ -9,7 +9,7 @@ terraform {
 
   backend "s3" {
     bucket = "invorto-terraform-state"
-    key    = "prod/terraform.tfstate"
+    key    = "${var.environment}/terraform.tfstate"
     region = "ap-south-1"
   }
 }
