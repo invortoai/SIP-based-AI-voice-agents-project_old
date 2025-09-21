@@ -222,7 +222,7 @@ resource "aws_autoscaling_group" "jambonz" {
 
       override {
         instance_type     = "c5.2xlarge"
-        weighted_capacity = "1"
+        weighted_capacity = 1.0
       }
 
       override {

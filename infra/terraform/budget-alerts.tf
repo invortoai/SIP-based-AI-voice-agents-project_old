@@ -21,13 +21,13 @@ resource "aws_cloudwatch_metric_alarm" "daily_cost_alert" {
 resource "aws_cloudwatch_metric_alarm" "monthly_cost_alert" {
   alarm_name          = "${var.project_name}-monthly-cost-alert-${var.environment}"
   comparison_operator = "GreaterThanOrEqualToThreshold"
-  evaluation_periods  = "30" # 30 days
+  evaluation_periods  = "7" # 7 days
   metric_name         = "EstimatedCharges"
   namespace           = "AWS/Billing"
   period              = "86400" # 24 hours
   statistic           = "Maximum"
   threshold           = var.monthly_budget * 0.8 # 80% of monthly budget
-  alarm_description   = "This metric monitors monthly estimated charges"
+  alarm_description   = "This metric monitors weekly estimated charges (80% of monthly budget)"
   alarm_actions       = [aws_sns_topic.budget_alerts.arn]
   ok_actions          = [aws_sns_topic.budget_alerts.arn]
 
