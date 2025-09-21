@@ -107,65 +107,21 @@
 # #   }
 # # }
 
-# ECR Repositories for Docker images
-resource "aws_ecr_repository" "api" {
-  name                 = "invorto-api"
-  image_tag_mutability = "MUTABLE"
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-
-  tags = {
-    Environment = var.environment
-    Service     = "api"
-    ManagedBy   = "terraform"
-  }
+# ECR Repositories for Docker images - Using existing repositories
+data "aws_ecr_repository" "api" {
+  name = "invorto-api"
 }
 
-resource "aws_ecr_repository" "realtime" {
-  name                 = "invorto-realtime"
-  image_tag_mutability = "MUTABLE"
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-
-  tags = {
-    Environment = var.environment
-    Service     = "realtime"
-    ManagedBy   = "terraform"
-  }
+data "aws_ecr_repository" "realtime" {
+  name = "invorto-realtime"
 }
 
-resource "aws_ecr_repository" "workers" {
-  name                 = "invorto-workers"
-  image_tag_mutability = "MUTABLE"
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-
-  tags = {
-    Environment = var.environment
-    Service     = "workers"
-    ManagedBy   = "terraform"
-  }
+data "aws_ecr_repository" "workers" {
+  name = "invorto-workers"
 }
 
-resource "aws_ecr_repository" "webhooks" {
-  name                 = "invorto-webhooks"
-  image_tag_mutability = "MUTABLE"
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-
-  tags = {
-    Environment = var.environment
-    Service     = "webhooks"
-    ManagedBy   = "terraform"
-  }
+data "aws_ecr_repository" "webhooks" {
+  name = "invorto-webhooks"
 }
 
 # ECR Repository for Telephony - Temporarily disabled due to configuration issues

@@ -203,11 +203,6 @@ resource "aws_autoscaling_group" "jambonz" {
 
   health_check_type = "ELB"
 
-  launch_template {
-    id      = aws_launch_template.jambonz.id
-    version = "$Latest"
-  }
-
   # Health check grace period for Jambonz startup
   health_check_grace_period = 600
 
@@ -232,12 +227,12 @@ resource "aws_autoscaling_group" "jambonz" {
 
       override {
         instance_type     = "c5.xlarge"
-        weighted_capacity = "0.8"
+        weighted_capacity = 0.8
       }
 
       override {
         instance_type     = "c5.4xlarge"
-        weighted_capacity = "1.2"
+        weighted_capacity = 1.2
       }
     }
   }

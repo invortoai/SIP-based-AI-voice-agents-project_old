@@ -22,7 +22,7 @@ variable "aws_region" {
 variable "availability_zones" {
   description = "Availability zones"
   type        = list(string)
-  default     = ["ap-south-1", "ap-south-2"]
+  default     = ["ap-south-1a", "ap-south-1b"]
 }
 
 variable "vpc_cidr" {
