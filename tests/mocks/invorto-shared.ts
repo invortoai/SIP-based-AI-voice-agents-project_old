@@ -65,5 +65,55 @@ export async function getSecret(_name: string): Promise<string | undefined> {
   return undefined;
 }
 
-// Re-export message types minimally to satisfy type imports if needed
-export * from "../../packages/shared/src/messages";
+// Define minimal message types to satisfy type imports
+export interface StartMessage {
+  t: "start";
+  callId: string;
+  agentId: string;
+  locale?: string;
+}
+
+export interface AudioMessage {
+  t: "audio";
+  seq: number;
+  pcm16: Uint8Array;
+}
+
+export interface SttPartialMessage {
+  t: "stt.partial";
+  text: string;
+  ts?: number;
+}
+
+export interface SttFinalMessage {
+  t: "stt.final";
+  text: string;
+  ts?: number;
+}
+
+export interface TtsChunkMessage {
+  t: "tts.chunk";
+  seq: number;
+  pcm16: Uint8Array | string | number[];
+}
+
+export interface ConnectedMessage {
+  t: "connected";
+  callId?: string;
+  timestamp?: number;
+}
+
+export interface ErrorMessage {
+  t: "error";
+  message: string;
+}
+
+export interface PongMessage {
+  t: "pong";
+  timestamp?: number;
+}
+
+export type ClientToServerMessage = StartMessage | AudioMessage;
+export type ServerToClientMessage = SttPartialMessage | SttFinalMessage | TtsChunkMessage | ConnectedMessage | ErrorMessage | PongMessage;
+export type WsInbound = ClientToServerMessage;
+export type WsOutbound = ServerToClientMessage;
