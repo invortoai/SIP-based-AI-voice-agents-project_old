@@ -13,13 +13,13 @@ import {
   healthChecker,
   createSpan,
   recordException
-} from "@invorto/shared/src/observability";
+} from "@invorto/shared/observability";
 import {
   requestSanitizer,
   apiKeyManager,
   PIIRedactor,
   getSecret
-} from "@invorto/shared/src/security";
+} from "@invorto/shared/security";
 
 // Initialize observability (skip top-level await; run async init outside of tests)
 async function initObservability() {
@@ -32,7 +32,9 @@ async function initObservability() {
       langfuseSecretKey: process.env.LANGFUSE_SECRET_KEY,
       langfuseBaseUrl: process.env.LANGFUSE_BASE_URL,
     });
-  } catch {}
+  } catch (err) {
+    console.error("Failed to initialize observability:", err);
+  }
 }
 if (!process.env.JEST_WORKER_ID && (process.env.NODE_ENV || "") !== "test") {
   void initObservability();
@@ -116,6 +118,7 @@ app.addHook("onReady", async () => {
     redis = new (Redis as any)(redisUrl);
   } catch (err) {
     app.log.error({ err }, "redis init failed");
+    throw new Error("Failed to initialize Redis connection");
   }
 });
 
@@ -568,7 +571,8 @@ async function webhookWorker() {
         clearTimeout(timeout);
 
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          const responseText = await response.text().catch(() => "");
+          throw new Error(`HTTP ${response.status}: ${response.statusText || "Unknown error"}${responseText ? ` - ${responseText.slice(0, 200)}` : ""}`);
         }
 
         // Record success for circuit breaker

@@ -11,6 +11,21 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.js"
+    },
+    "./observability": {
+      "types": "./dist/observability.d.ts",
+      "import": "./dist/observability.js",
+      "require": "./dist/observability.js"
+    },
+    "./security": {
+      "types": "./dist/security.d.ts",
+      "import": "./dist/security.js",
+      "require": "./dist/security.js"
+    },
+    "./resilience": {
+      "types": "./dist/resilience.d.ts",
+      "import": "./dist/resilience.js",
+      "require": "./dist/resilience.js"
     }
   },
   "scripts": {
