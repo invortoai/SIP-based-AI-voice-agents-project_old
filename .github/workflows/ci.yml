@@ -188,7 +188,7 @@ jobs:
             infra/terraform/plan.txt
             infra/terraform/outputs.json
 
-  # Build Docker Images
+ # Build Docker Images
   build:
     name: Build Docker Images
     runs-on: ubuntu-latest
