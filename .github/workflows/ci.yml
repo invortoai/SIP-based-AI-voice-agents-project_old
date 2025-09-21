@@ -121,8 +121,9 @@ jobs:
           NODE_ENV: test
           DB_URL: postgresql://test:test@localhost:5432/invorto_test
           REDIS_URL: redis://localhost:6379
+          CI: true
         run: npm test
-        continue-on-error: true
+        timeout-minutes: 15
       
       - name: Upload coverage reports
         uses: codecov/codecov-action@v3
