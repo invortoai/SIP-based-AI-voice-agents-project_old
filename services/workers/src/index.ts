@@ -1,6 +1,8 @@
 import Redis from "ioredis";
 import type { Redis as RedisType } from "ioredis";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
+import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
 import {
   initializeObservability,
   logger,
@@ -30,8 +32,23 @@ const piiRedactor = new PIIRedactor();
 
 const redisUrl = await getSecret("REDIS_URL") || process.env.REDIS_URL || "redis://localhost:6379";
 const redis: RedisType = new (Redis as any)(redisUrl);
-const s3 = new S3Client({});
+const s3 = new S3Client({ region: process.env.AWS_REGION || 'ap-south-1' });
+const ses = new SESClient({ region: process.env.AWS_REGION || 'ap-south-1' });
+const sns = new SNSClient({ region: process.env.AWS_REGION || 'ap-south-1' });
 const redisQ: RedisType = new (Redis as any)(redisUrl);
+
+// Get bucket names from environment or secrets
+async function getBucketNames() {
+  const recordingsBucket = process.env.S3_BUCKET_RECORDINGS || await getSecret('S3_BUCKET_RECORDINGS') || 'invorto-recordings';
+  const transcriptsBucket = process.env.S3_BUCKET_TRANSCRIPTS || await getSecret('S3_BUCKET_TRANSCRIPTS') || 'invorto-transcripts';
+  const documentsBucket = process.env.S3_BUCKET_DOCUMENTS || await getSecret('S3_BUCKET_DOCUMENTS') || 'invorto-documents';
+
+  return {
+    recordings: recordingsBucket,
+    transcripts: transcriptsBucket,
+    documents: documentsBucket,
+  };
+}
 
 async function main() {
   structuredLogger.info("Worker service starting");
@@ -588,19 +605,110 @@ async function processCostCalculation(callId: string, payload: any) {
 async function processTranscription(callId: string, audioUrl: string, language: string) {
   const span = createSpan("process_transcription");
   try {
-    // This would integrate with Deepgram or other ASR service
-    // For now, return mock result
+    // Get Deepgram API key from secrets
+    const deepgramApiKey = await getSecret("DEEPGRAM_API_KEY");
+    if (!deepgramApiKey) {
+      throw new Error("Deepgram API key not configured");
+    }
+
+    // Extract S3 information from audioUrl
+    // audioUrl format: s3://bucket/key or signed URL
+    let audioData: Buffer;
+    let contentType = "audio/wav";
+
+    if (audioUrl.startsWith("s3://")) {
+      // Direct S3 URL - need to download from S3
+      const s3Url = new URL(audioUrl);
+      const bucket = s3Url.hostname;
+      const key = s3Url.pathname.substring(1); // Remove leading /
+
+      const s3Response = await s3.send(new GetObjectCommand({
+        Bucket: bucket,
+        Key: key,
+      }));
+
+      if (s3Response.Body) {
+        audioData = Buffer.from(await s3Response.Body.transformToByteArray());
+      } else {
+        throw new Error("No audio data found in S3 object");
+      }
+      contentType = s3Response.ContentType || "audio/wav";
+    } else {
+      // Assume it's a signed URL or direct URL
+      const response = await fetch(audioUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch audio: ${response.status} ${response.statusText}`);
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      audioData = Buffer.from(arrayBuffer);
+      contentType = response.headers.get("content-type") || "audio/wav";
+    }
+
+    // Call Deepgram API
+    const deepgramResponse = await fetch(`https://api.deepgram.com/v1/listen?model=nova-2&language=${language}&smart_format=true&punctuate=true`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Token ${deepgramApiKey}`,
+        "Content-Type": contentType,
+      },
+      body: new Uint8Array(audioData), // Convert Buffer to Uint8Array for fetch
+    });
+
+    if (!deepgramResponse.ok) {
+      const errorText = await deepgramResponse.text();
+      throw new Error(`Deepgram API error: ${deepgramResponse.status} ${errorText}`);
+    }
+
+    const deepgramResult = await deepgramResponse.json();
+
+    // Extract transcription from Deepgram response
+    const transcript = deepgramResult.results?.channels?.[0]?.alternatives?.[0]?.transcript || "";
+    const confidence = deepgramResult.results?.channels?.[0]?.alternatives?.[0]?.confidence || 0;
+
+    // Store detailed transcription result
     const result = {
       callId,
-      transcription: "Mock transcription for call " + callId,
-      confidence: 0.95,
+      transcription: transcript,
+      confidence: confidence,
       language,
+      duration: deepgramResult.metadata?.duration || 0,
+      words: deepgramResult.results?.channels?.[0]?.alternatives?.[0]?.words || [],
       processedAt: new Date().toISOString(),
+      provider: "deepgram",
+      model: "nova-2",
     };
-    
+
+    // Store in S3 for persistence
+    const buckets = await getBucketNames();
+    const transcriptKey = `transcriptions/${callId}.json`;
+
+    await s3.send(new PutObjectCommand({
+      Bucket: buckets.transcripts,
+      Key: transcriptKey,
+      Body: JSON.stringify(result),
+      ContentType: "application/json",
+      Metadata: {
+        callId,
+        provider: "deepgram",
+        language,
+      },
+    }));
+
+    structuredLogger.info("Transcription completed", {
+      callId,
+      confidence: result.confidence,
+      duration: result.duration,
+      wordCount: result.words.length,
+    });
+
     return result;
   } catch (err) {
     recordException(err as Error, span);
+    structuredLogger.error("Transcription processing failed", {
+      callId,
+      error: (err as Error).message,
+      audioUrl,
+    });
     throw err;
   } finally {
     span.end();
@@ -633,6 +741,103 @@ async function calculateCallCosts(callId: string, usage: any) {
   } finally {
     span.end();
   }
+}
+
+// Helper function for email content preparation
+function prepareEmailContent(template: string, data: any) {
+  const templates = {
+    quality_alert: {
+      subject: "Call Quality Alert - Action Required",
+      textBody: `Call Quality Alert
+
+Call ID: ${data.callId}
+Alerts: ${data.alerts?.join(', ') || 'N/A'}
+
+Please review the call quality metrics and take appropriate action.
+
+Best regards,
+Invorto AI Platform`,
+      htmlBody: `
+        <h2>Call Quality Alert</h2>
+        <p><strong>Call ID:</strong> ${data.callId}</p>
+        <p><strong>Alerts:</strong> ${data.alerts?.join(', ') || 'N/A'}</p>
+        <p>Please review the call quality metrics and take appropriate action.</p>
+        <br>
+        <p>Best regards,<br>Invorto AI Platform</p>
+      `
+    },
+    call_completed: {
+      subject: "Call Completed Successfully",
+      textBody: `Call Completed
+
+Call ID: ${data.callId}
+Duration: ${data.duration || 'N/A'} seconds
+Status: Completed
+
+Thank you for using Invorto AI Platform.
+
+Best regards,
+Invorto AI Platform`,
+      htmlBody: `
+        <h2>Call Completed Successfully</h2>
+        <p><strong>Call ID:</strong> ${data.callId}</p>
+        <p><strong>Duration:</strong> ${data.duration || 'N/A'} seconds</p>
+        <p><strong>Status:</strong> Completed</p>
+        <br>
+        <p>Thank you for using Invorto AI Platform.</p>
+        <br>
+        <p>Best regards,<br>Invorto AI Platform</p>
+      `
+    },
+    default: {
+      subject: `Notification: ${template}`,
+      textBody: `Notification: ${template}
+
+${JSON.stringify(data, null, 2)}
+
+Best regards,
+Invorto AI Platform`,
+      htmlBody: `
+        <h2>Notification: ${template}</h2>
+        <pre>${JSON.stringify(data, null, 2)}</pre>
+        <br>
+        <p>Best regards,<br>Invorto AI Platform</p>
+      `
+    }
+  };
+
+  return templates[template as keyof typeof templates] || templates.default;
+}
+
+// Helper function for SMS content preparation
+function prepareSMSContent(template: string, data: any) {
+  const templates = {
+    quality_alert: `Call Quality Alert - Call ID: ${data.callId}. Alerts: ${data.alerts?.join(', ') || 'N/A'}. Please review.`,
+    call_completed: `Call Completed - Call ID: ${data.callId}. Duration: ${data.duration || 'N/A'}s. Status: Completed.`,
+    default: `Notification: ${template} - ${JSON.stringify(data)}`
+  };
+
+  return templates[template as keyof typeof templates] || templates.default;
+}
+
+// Helper function for push notification content preparation
+function preparePushContent(template: string, data: any) {
+  const templates = {
+    quality_alert: {
+      title: "Call Quality Alert",
+      text: `Call ${data.callId} has quality issues. Please review.`
+    },
+    call_completed: {
+      title: "Call Completed",
+      text: `Call ${data.callId} completed successfully.`
+    },
+    default: {
+      title: `Notification: ${template}`,
+      text: `New notification: ${template}`
+    }
+  };
+
+  return templates[template as keyof typeof templates] || templates.default;
 }
 
 // Helper functions for new workers
@@ -752,14 +957,37 @@ async function processAuditLogging(tenantId: string, data: any) {
 async function sendEmailNotification(recipient: string, template: string, data: any) {
   const span = createSpan("send_email_notification");
   try {
-    // This would integrate with an email service like SendGrid, SES, etc.
-    // For now, just log the notification
-    structuredLogger.info("Email notification sent", { recipient, template, data });
+    // Get sender email from environment or secrets
+    const senderEmail = process.env.SES_SENDER_EMAIL || await getSecret("SES_SENDER_EMAIL") || "noreply@invortoai.com";
 
-    // Mock implementation - replace with actual email service
-    console.log(`Sending email to ${recipient} with template ${template}`, data);
+    // Prepare email content based on template
+    const emailContent = prepareEmailContent(template, data);
+
+    // Send email using SES
+    await ses.send(new SendEmailCommand({
+      Source: senderEmail,
+      Destination: {
+        ToAddresses: [recipient],
+      },
+      Message: {
+        Subject: {
+          Data: emailContent.subject,
+        },
+        Body: {
+          Text: {
+            Data: emailContent.textBody,
+          },
+          Html: {
+            Data: emailContent.htmlBody,
+          },
+        },
+      },
+    }));
+
+    structuredLogger.info("Email notification sent successfully", { recipient, template });
   } catch (err) {
     recordException(err as Error, span);
+    structuredLogger.error("Failed to send email notification", { recipient, template, error: (err as Error).message });
     throw err;
   } finally {
     span.end();
@@ -769,13 +997,25 @@ async function sendEmailNotification(recipient: string, template: string, data: 
 async function sendSMSNotification(recipient: string, template: string, data: any) {
   const span = createSpan("send_sms_notification");
   try {
-    // This would integrate with an SMS service like Twilio, AWS SNS, etc.
-    structuredLogger.info("SMS notification sent", { recipient, template, data });
+    // Prepare SMS content based on template
+    const smsContent = prepareSMSContent(template, data);
 
-    // Mock implementation - replace with actual SMS service
-    console.log(`Sending SMS to ${recipient} with template ${template}`, data);
+    // Send SMS using SNS
+    await sns.send(new PublishCommand({
+      PhoneNumber: recipient,
+      Message: smsContent,
+      MessageAttributes: {
+        'AWS.SNS.SMS.SMSType': {
+          DataType: 'String',
+          StringValue: 'Transactional'
+        }
+      }
+    }));
+
+    structuredLogger.info("SMS notification sent successfully", { recipient, template });
   } catch (err) {
     recordException(err as Error, span);
+    structuredLogger.error("Failed to send SMS notification", { recipient, template, error: (err as Error).message });
     throw err;
   } finally {
     span.end();
@@ -785,13 +1025,37 @@ async function sendSMSNotification(recipient: string, template: string, data: an
 async function sendPushNotification(recipient: string, template: string, data: any) {
   const span = createSpan("send_push_notification");
   try {
-    // This would integrate with push notification services
-    structuredLogger.info("Push notification sent", { recipient, template, data });
+    // For now, implement as SNS push notification
+    // In production, this would integrate with FCM, APNS, or other push services
+    const pushContent = preparePushContent(template, data);
 
-    // Mock implementation - replace with actual push service
-    console.log(`Sending push notification to ${recipient} with template ${template}`, data);
+    // Send push notification via SNS (assuming recipient is a device token/endpoint ARN)
+    await sns.send(new PublishCommand({
+      TargetArn: recipient, // This should be an SNS endpoint ARN for the device
+      Message: JSON.stringify({
+        default: pushContent.text,
+        APNS: JSON.stringify({
+          aps: {
+            alert: pushContent.title,
+            sound: "default"
+          },
+          customData: data
+        }),
+        GCM: JSON.stringify({
+          notification: {
+            title: pushContent.title,
+            body: pushContent.text
+          },
+          data: data
+        })
+      }),
+      MessageStructure: 'json'
+    }));
+
+    structuredLogger.info("Push notification sent successfully", { recipient, template });
   } catch (err) {
     recordException(err as Error, span);
+    structuredLogger.error("Failed to send push notification", { recipient, template, error: (err as Error).message });
     throw err;
   } finally {
     span.end();
