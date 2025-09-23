@@ -57,6 +57,99 @@ module "ecs_cluster" {
   vpc_id = module.vpc.vpc_id
 }
 
+# ALB for Jambonz Media Gateway
+resource "aws_lb" "jambonz" {
+  name               = "${var.environment}-jambonz-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb.id]
+  subnets            = module.vpc.public_subnets
+
+  enable_deletion_protection = var.environment == "production"
+
+  tags = {
+    Name        = "${var.environment}-jambonz-alb"
+    Environment = var.environment
+    Service     = "jambonz"
+  }
+}
+
+# Target Group for Jambonz
+resource "aws_lb_target_group" "jambonz" {
+  name        = "${var.environment}-jambonz"
+  port        = 80
+  protocol    = "HTTP"
+  vpc_id      = module.vpc.vpc_id
+  target_type = "instance"
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+    timeout             = 5
+    interval            = 30
+    path                = "/health"
+    matcher             = "200"
+  }
+
+  tags = {
+    Environment = var.environment
+    Service     = "jambonz"
+  }
+}
+
+# ALB Listener for Jambonz
+resource "aws_lb_listener" "jambonz" {
+  load_balancer_arn = aws_lb.jambonz.arn
+  port              = "443"
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-2016-08"
+  certificate_arn   = var.certificate_arn
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.jambonz.arn
+  }
+}
+
+# Route 53 Records for Main Domain
+resource "aws_route53_record" "api" {
+  zone_id = aws_route53_zone.main.zone_id
+  name    = "api"
+  type    = "A"
+
+  alias {
+    name                   = module.alb.alb_dns_name
+    zone_id                = module.alb.alb_zone_id
+    evaluate_target_health = true
+  }
+}
+
+resource "aws_route53_record" "root" {
+  zone_id = aws_route53_zone.main.zone_id
+  name    = var.domain_name
+  type    = "A"
+
+  alias {
+    name                   = module.alb.alb_dns_name
+    zone_id                = module.alb.alb_zone_id
+    evaluate_target_health = true
+  }
+}
+
+# Route 53 Record for Jambonz
+resource "aws_route53_record" "jambonz" {
+  zone_id = aws_route53_zone.main.zone_id
+  name    = "jambonz"
+  type    = "A"
+
+  alias {
+    name                   = aws_lb.jambonz.dns_name
+    zone_id                = aws_lb.jambonz.zone_id
+    evaluate_target_health = true
+  }
+}
+
 # Jambonz Media Gateway (EC2 ASG)
 module "jambonz_media" {
   source = "./modules/jambonz-media"
@@ -64,7 +157,7 @@ module "jambonz_media" {
   environment         = var.environment
   vpc_id              = module.vpc.vpc_id
   private_subnets     = module.vpc.private_subnets
-  target_group_arns   = [] # Will be updated when ALB target groups are created
+  target_group_arns   = [aws_lb_target_group.jambonz.arn]
   instance_type       = var.jambonz_instance_type
   ami_id              = var.jambonz_ami_id
   key_name            = var.jambonz_key_name
@@ -82,6 +175,16 @@ module "jambonz_media" {
   tags = {
     Service   = "jambonz-media"
     Component = "telephony"
+  }
+}
+
+# Route 53 Hosted Zone
+resource "aws_route53_zone" "main" {
+  name = var.domain_name
+
+  tags = {
+    Environment = var.environment
+    Service     = "dns"
   }
 }
 

@@ -370,9 +370,12 @@ module "svc_api" {
   desired_count    = var.api_desired_count
 
   environment = {
-    NODE_ENV  = "production"
-    PORT      = "8080"
-    REDIS_URL = "redis://${module.redis.endpoint}"
+    NODE_ENV         = "production"
+    PORT             = "8080"
+    REDIS_URL        = "redis://${module.redis.endpoint}"
+    PUBLIC_BASE_URL  = "https://${var.domain_name}"
+    REALTIME_WS_URL  = "wss://api.${var.domain_name}/v1/realtime"
+    TENANT_WEBHOOK_URL = "https://api.${var.domain_name}/webhooks"
   }
 
   secrets = [
@@ -405,9 +408,11 @@ module "svc_realtime" {
   desired_count    = var.realtime_desired_count
 
   environment = {
-    NODE_ENV  = "production"
-    PORT      = "8081"
-    REDIS_URL = "redis://${module.redis.endpoint}"
+    NODE_ENV         = "production"
+    PORT             = "8081"
+    REDIS_URL        = "redis://${module.redis.endpoint}"
+    PUBLIC_BASE_URL  = "https://${var.domain_name}"
+    REALTIME_WS_URL  = "wss://api.${var.domain_name}/v1/realtime"
   }
 
   secrets = [
@@ -415,6 +420,7 @@ module "svc_realtime" {
     { name = "SUPABASE_SERVICE_ROLE", valueFrom = module.secrets.secret_arns.supabase_service_role },
     { name = "OPENAI_API_KEY", valueFrom = module.secrets.secret_arns.openai },
     { name = "DEEPGRAM_API_KEY", valueFrom = module.secrets.secret_arns.deepgram },
+    { name = "ELEVENLABS_API_KEY", valueFrom = module.secrets.secret_arns.elevenlabs },
     { name = "WEBHOOK_SECRET", valueFrom = module.secrets.secret_arns.webhook },
     { name = "JWT_PUBLIC_KEY", valueFrom = module.secrets.secret_arns.jwt }
   ]
