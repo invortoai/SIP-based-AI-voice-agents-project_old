@@ -258,6 +258,12 @@ variable "openai_api_key" {
   sensitive   = true
 }
 
+variable "elevenlabs_api_key" {
+  description = "ElevenLabs API key"
+  type        = string
+  sensitive   = true
+}
+
 variable "jwt_secret" {
   description = "JWT secret for authentication"
   type        = string

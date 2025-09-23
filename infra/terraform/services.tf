@@ -380,6 +380,7 @@ module "svc_api" {
     { name = "SUPABASE_SERVICE_ROLE", valueFrom = module.secrets.secret_arns.supabase_service_role },
     { name = "OPENAI_API_KEY", valueFrom = module.secrets.secret_arns.openai },
     { name = "DEEPGRAM_API_KEY", valueFrom = module.secrets.secret_arns.deepgram },
+    { name = "ELEVENLABS_API_KEY", valueFrom = module.secrets.secret_arns.elevenlabs },
     { name = "WEBHOOK_SECRET", valueFrom = module.secrets.secret_arns.webhook },
     { name = "JWT_PUBLIC_KEY", valueFrom = module.secrets.secret_arns.jwt }
   ]

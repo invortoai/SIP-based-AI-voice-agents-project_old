@@ -23,6 +23,10 @@ resource "aws_secretsmanager_secret" "jambonz" {
   name = "${var.environment}/jambonz_credentials"
 }
 
+resource "aws_secretsmanager_secret" "elevenlabs" {
+  name = "${var.environment}/elevenlabs_api_key"
+}
+
 # Supabase (DB is Supabase)
 resource "aws_secretsmanager_secret" "supabase_url" {
   name = "${var.environment}/supabase_url"
@@ -38,6 +42,7 @@ output "secret_arns" {
     jwt                   = aws_secretsmanager_secret.jwt.arn
     deepgram              = aws_secretsmanager_secret.deepgram.arn
     openai                = aws_secretsmanager_secret.openai.arn
+    elevenlabs            = aws_secretsmanager_secret.elevenlabs.arn
     jambonz               = aws_secretsmanager_secret.jambonz.arn
     supabase_url          = aws_secretsmanager_secret.supabase_url.arn
     supabase_service_role = aws_secretsmanager_secret.supabase_service_role.arn

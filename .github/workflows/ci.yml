@@ -184,6 +184,7 @@ jobs:
             -var="domain_name=api.invortoai.com" \
             -var="deepgram_api_key=${{ secrets.DEEPGRAM_API_KEY }}" \
             -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}" \
+            -var="elevenlabs_api_key=${{ secrets.ELEVENLABS_API_KEY }}" \
             -var="jwt_secret=${{ secrets.JWT_SECRET }}" \
             -var="webhook_secret=${{ secrets.WEBHOOK_SECRET }}" \
             -var="db_password=${{ secrets.DB_PASSWORD }}" \
