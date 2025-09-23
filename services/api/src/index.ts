@@ -7,6 +7,12 @@ import { s3Artifacts } from "./s3-helpers.js";
 import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 import client from "prom-client";
 import fastifyCors from "@fastify/cors";
+import fastifyMultipart from "@fastify/multipart";
+
+// Import our new tool systems
+import { setupDocumentTools } from "./document-tools.js";
+import { setupCalendarTools } from "./calendar-tools.js";
+import { setupToolManager } from "./tool-manager.js";
 
 export const app: FastifyInstance = Fastify({ logger: true });
 
@@ -25,6 +31,18 @@ app.register(fastifyCors, {
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   credentials: false,
 });
+
+// Register multipart for file uploads
+app.register(fastifyMultipart, {
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB max file size
+  }
+});
+
+// Setup our tool systems
+setupDocumentTools(app);
+setupCalendarTools(app);
+setupToolManager(app);
 
 // Force Access-Control-Allow-Origin deterministically to PUBLIC_BASE_URL for health/simple requests (test-friendly)
 app.addHook("onSend", async (req, reply, payload) => {
