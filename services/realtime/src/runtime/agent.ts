@@ -227,7 +227,7 @@ export class AgentRuntime extends EventEmitter {
         const mod = await import('../adapters/tts/elevenlabs.js');
         this.ttsAdapter = new mod.ElevenLabsTtsClient({
           apiKey: this.config.ttsApiKey,
-          voiceId: this.config.voice || process.env.ELEVENLABS_VOICE_ID || 'Rachel',
+          voiceId: this.config.voice || process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM', // Rachel voice ID
           modelId: this.config.ttsModel || process.env.ELEVENLABS_MODEL_ID || 'eleven_multilingual_v2',
           sampleRate: 16000,
           format: 'pcm_16000'
