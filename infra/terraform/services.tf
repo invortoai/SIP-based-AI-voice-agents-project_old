@@ -370,11 +370,11 @@ module "svc_api" {
   desired_count    = var.api_desired_count
 
   environment = {
-    NODE_ENV         = "production"
-    PORT             = "8080"
-    REDIS_URL        = "redis://${module.redis.endpoint}"
-    PUBLIC_BASE_URL  = "https://${var.domain_name}"
-    REALTIME_WS_URL  = "wss://api.${var.domain_name}/v1/realtime"
+    NODE_ENV           = "production"
+    PORT               = "8080"
+    REDIS_URL          = "redis://${module.redis.endpoint}"
+    PUBLIC_BASE_URL    = "https://${var.domain_name}"
+    REALTIME_WS_URL    = "wss://api.${var.domain_name}/v1/realtime"
     TENANT_WEBHOOK_URL = "https://api.${var.domain_name}/webhooks"
   }
 
@@ -408,11 +408,11 @@ module "svc_realtime" {
   desired_count    = var.realtime_desired_count
 
   environment = {
-    NODE_ENV         = "production"
-    PORT             = "8081"
-    REDIS_URL        = "redis://${module.redis.endpoint}"
-    PUBLIC_BASE_URL  = "https://${var.domain_name}"
-    REALTIME_WS_URL  = "wss://api.${var.domain_name}/v1/realtime"
+    NODE_ENV        = "production"
+    PORT            = "8081"
+    REDIS_URL       = "redis://${module.redis.endpoint}"
+    PUBLIC_BASE_URL = "https://${var.domain_name}"
+    REALTIME_WS_URL = "wss://api.${var.domain_name}/v1/realtime"
   }
 
   secrets = [
