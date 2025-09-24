@@ -32,6 +32,8 @@ RUN npm ci || npm install
 # Build only this workspace
 FROM deps AS build
 COPY . .
+# Install dependencies for shared package first
+RUN cd packages/shared && npm install
 # Build shared packages first
 RUN npm run -w packages/shared build
 RUN npm run -w packages/shared-core build
