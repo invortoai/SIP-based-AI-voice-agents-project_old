@@ -25,8 +25,8 @@
     "zod": "^3.23.8",
     "ws": "^8.17.1",
     "ajv": "^8.17.1",
-    "@invorto/shared-core": "0.1.0",
-    "@invorto/shared": "0.1.0"
+    "@invorto/shared-core": "workspace:*",
+    "@invorto/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/ioredis": "^5.0.0",
