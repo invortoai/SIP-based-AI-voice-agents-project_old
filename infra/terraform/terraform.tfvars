@@ -1,6 +1,7 @@
 environment           = "production"
 deepgram_api_key      = "placeholder"
 openai_api_key        = "placeholder"
+elevenlabs_api_key    = "placeholder"
 jwt_secret            = "placeholder"
 webhook_secret        = "placeholder"
 jambonz_key_name      = ""

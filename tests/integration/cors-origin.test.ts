@@ -2,13 +2,13 @@
 /**
  * CORS / Origin header validation for API and Webhooks services
  */
-import { app as apiApp } from "../../services/api/src/index";
-import { app as webhooksApp } from "../../services/webhooks/src/index";
 
 describe("CORS/Origin headers", () => {
   const prevEnv = { ...process.env } as NodeJS.ProcessEnv;
   let apiPort = 0;
   let whPort = 0;
+  let apiApp: any;
+  let webhooksApp: any;
 
   beforeAll(async () => {
     process.env.NODE_ENV = "test";
@@ -16,6 +16,13 @@ describe("CORS/Origin headers", () => {
 
     // Set explicit PUBLIC_BASE_URL to enforce a fixed Access-Control-Allow-Origin value
     process.env.PUBLIC_BASE_URL = "https://api.invortoai.com";
+
+    // Dynamic imports to avoid ES module issues
+    const apiModule = await import("../../services/api/dist/index.js");
+    const webhooksModule = await import("../../services/webhooks/dist/index.js");
+
+    apiApp = apiModule.app;
+    webhooksApp = webhooksModule.app;
 
     const apiAddr = await apiApp.listen({ port: 0, host: "127.0.0.1" });
     const a = apiApp.server.address();
