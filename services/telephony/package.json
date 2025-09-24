@@ -15,7 +15,7 @@
     "ioredis": "^5.4.1",
     "zod": "^3.23.8",
     "prom-client": "^15.1.3",
-    "@invorto/shared": "workspace:*"
+    "@invorto/shared": "file:../../packages/shared"
   },
   "devDependencies": {
     "@types/ioredis": "^5.0.0",

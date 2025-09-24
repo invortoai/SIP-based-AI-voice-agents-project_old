@@ -14,7 +14,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@invorto/shared": "workspace:*",
+    "@invorto/shared": "file:../../packages/shared",
     "ioredis": "^5.4.1",
     "@aws-sdk/client-s3": "^3.617.0",
     "@aws-sdk/client-ses": "^3.665.0",
