@@ -9,7 +9,7 @@ terraform {
 
   backend "s3" {
     bucket = "invorto-terraform-state"
-    key    = "${var.environment}/terraform.tfstate"
+    key    = "default/terraform.tfstate"
     region = "ap-south-1"
   }
 }
@@ -62,7 +62,7 @@ resource "aws_lb" "jambonz" {
   name               = "${var.environment}-jambonz-alb"
   internal           = false
   load_balancer_type = "application"
-  security_groups    = [aws_security_group.alb.id]
+  security_groups    = [module.alb.security_group_id]
   subnets            = module.vpc.public_subnets
 
   enable_deletion_protection = var.environment == "production"
@@ -119,8 +119,8 @@ resource "aws_route53_record" "api" {
   type    = "A"
 
   alias {
-    name                   = module.alb.alb_dns_name
-    zone_id                = module.alb.alb_zone_id
+    name                   = module.alb.dns_name
+    zone_id                = module.alb.zone_id
     evaluate_target_health = true
   }
 }
@@ -131,8 +131,8 @@ resource "aws_route53_record" "root" {
   type    = "A"
 
   alias {
-    name                   = module.alb.alb_dns_name
-    zone_id                = module.alb.alb_zone_id
+    name                   = module.alb.dns_name
+    zone_id                = module.alb.zone_id
     evaluate_target_health = true
   }
 }
