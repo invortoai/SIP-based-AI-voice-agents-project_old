@@ -25,12 +25,8 @@ module.exports = {
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
   moduleNameMapper: {
-    // Only mock @invorto/shared during actual test runs, not during build
-    ...(process.env.JEST_WORKER_ID ? {
-      '^@invorto/shared$': '<rootDir>/tests/mocks/invorto-shared.ts',
-    } : {
-      '^@invorto/shared$': '<rootDir>/packages/shared/dist/index.js',
-    }),
+    // Always use mock for @invorto/shared during tests
+    '^@invorto/shared$': '<rootDir>/tests/mocks/invorto-shared.ts',
     '^@invorto/shared/src/observability$': '<rootDir>/packages/shared/src/observability.ts',
     '^@invorto/shared/src/security$': '<rootDir>/packages/shared/src/security.ts',
     '^@invorto/shared/(.*)$': '<rootDir>/packages/shared/src/$1',
