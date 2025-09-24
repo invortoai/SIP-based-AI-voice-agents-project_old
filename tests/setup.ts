@@ -31,16 +31,21 @@ process.env.TELEPHONY_SEMAPHORE_TTL_SEC = process.env.TELEPHONY_SEMAPHORE_TTL_SE
 process.env.JEST_WORKER_ID = process.env.JEST_WORKER_ID || '1';
 
 /* Build workspace packages before running tests to ensure .js files exist */
-try {
-  console.log('Building workspace packages...');
-  execSync('npm run build', {
-    stdio: 'inherit',
-    cwd: path.resolve(__dirname, '..')
-  });
-  console.log('Workspace packages built successfully');
-} catch (error) {
-  console.error('Failed to build workspace packages:', error);
-  throw error;
+/* Skip build in CI since packages are built explicitly beforehand */
+if (!process.env.CI) {
+  try {
+    console.log('Building workspace packages...');
+    execSync('npm run build', {
+      stdio: 'inherit',
+      cwd: path.resolve(__dirname, '..')
+    });
+    console.log('Workspace packages built successfully');
+  } catch (error) {
+    console.error('Failed to build workspace packages:', error);
+    throw error;
+  }
+} else {
+  console.log('Skipping workspace build in CI (packages already built)');
 }
 
 /* Redis is mapped to ioredis-mock via jest.config.js moduleNameMapper to avoid real Redis in tests */
