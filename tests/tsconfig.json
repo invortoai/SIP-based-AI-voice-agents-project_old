@@ -6,13 +6,7 @@
     "module": "ESNext",
     "target": "ES2022",
     "moduleResolution": "Bundler",
-    "strict": true,
-    "paths": {
-      "@invorto/shared": ["../tests/mocks/invorto-shared.ts"],
-      "@invorto/shared/src/*": ["../packages/shared/src/*"],
-      "@invorto/shared-core": ["../packages/shared-core/src/index.ts"],
-      "@invorto/shared-core/*": ["../packages/shared-core/src/*"]
-    }
+    "strict": true
   },
   "include": ["**/*.ts"]
 }
