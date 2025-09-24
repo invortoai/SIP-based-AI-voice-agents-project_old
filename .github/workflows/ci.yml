@@ -394,11 +394,8 @@ jobs:
               --force-new-deployment \
               --region ${{ env.AWS_REGION }}
 
-            # Wait for service to stabilize
-            aws ecs wait services-stable \
-              --cluster ${cluster} \
-              --services ${service_name} \
-              --region ${{ env.AWS_REGION }}
+            # Note: Service stabilization wait moved outside this function
+            # to allow sequential deployment of all services
           }
 
           # Determine cluster name based on branch
@@ -407,10 +404,15 @@ jobs:
             CLUSTER_NAME="staging-invorto-cluster"
           fi
 
-          # Deploy all services
+          # Deploy all services sequentially to avoid conflicts
           for service in api realtime webhooks workers telephony-ecs; do
             echo "Deploying ${service}..."
             update_service ${service} $CLUSTER_NAME
+            echo "Waiting for ${service} to stabilize..."
+            aws ecs wait services-stable \
+              --cluster $CLUSTER_NAME \
+              --services production-${service} \
+              --region ${{ env.AWS_REGION }}
           done
       
       - name: Run smoke tests
