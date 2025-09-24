@@ -25,8 +25,9 @@ module.exports = {
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
   moduleNameMapper: {
-    // Always use mock for @invorto/shared during tests
+    // Always use mock for @invorto/shared during tests - put this first to avoid conflicts
     '^@invorto/shared$': '<rootDir>/tests/mocks/invorto-shared.ts',
+    // Specific sub-path mappings for shared package
     '^@invorto/shared/src/observability$': '<rootDir>/packages/shared/src/observability.ts',
     '^@invorto/shared/src/security$': '<rootDir>/packages/shared/src/security.ts',
     '^@invorto/shared/(.*)$': '<rootDir>/packages/shared/src/$1',
