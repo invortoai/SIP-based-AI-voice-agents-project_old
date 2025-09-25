@@ -48,6 +48,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 # Copy production node_modules from build (includes workspace deps like @invorto/shared)
 COPY --from=build /workspace/node_modules ./node_modules
+# Copy built shared packages to node_modules
+COPY --from=build /workspace/packages/shared ./node_modules/@invorto/shared
 # Copy built service
 COPY --from=build /workspace/services/api/dist ./dist
 # Copy service package.json (start script already defined)

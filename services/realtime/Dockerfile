@@ -48,6 +48,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 # Bring production node_modules from build stage (includes shared workspaces)
 COPY --from=build /workspace/node_modules ./node_modules
+# Copy built shared packages to node_modules
+COPY --from=build /workspace/packages/shared ./node_modules/@invorto/shared
 # Copy built service files
 COPY --from=build /workspace/services/realtime/dist ./dist
 # Copy service manifest
