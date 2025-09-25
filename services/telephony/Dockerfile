@@ -14,6 +14,10 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+# Install dependencies for shared packages specifically
+RUN cd packages/shared && npm install
+RUN cd packages/shared-core && npm install
+
 # Build the application
 RUN npm run -w packages/shared build
 RUN npm run -w packages/shared-core build
