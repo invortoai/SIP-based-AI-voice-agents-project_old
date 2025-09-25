@@ -14,6 +14,9 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+# Clean up any existing dist directories to prevent cache conflicts
+RUN rm -rf /workspace/dist
+
 # Install dependencies for shared packages specifically
 RUN cd packages/shared && npm install
 RUN cd packages/shared-core && npm install
