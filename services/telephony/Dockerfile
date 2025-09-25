@@ -17,16 +17,8 @@ COPY . .
 # Clean up any existing dist directories to prevent cache conflicts
 RUN rm -rf /workspace/dist
 
-# Install dependencies for shared packages specifically
-RUN cd packages/shared && npm install
-RUN cd packages/shared-core && npm install
-
 # Build the application
-RUN npm run -w packages/shared build
-RUN npm run -w packages/shared-core build
-# Install service dependencies
-RUN cd services/telephony && npm install
-RUN npm run -w services/telephony build
+RUN npm run build
 
 # Production stage
 FROM node:20-alpine
