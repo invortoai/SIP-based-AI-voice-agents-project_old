@@ -331,7 +331,8 @@ jobs:
 
             # Update the image in the task definition
             NEW_TASK_DEF=$(echo "$TASK_DEFINITION" | \
-              jq --arg IMAGE "${ECR_REGISTRY}/${ECR_REPOSITORY_PREFIX}-${service}:${{ github.sha }}" '
+              jq --arg IMAGE "${ECR_REGISTRY}/${ECR_REPOSITORY_PREFIX}-${service}:${{ github.sha }}" \
+                  --arg SERVICE_NAME "$service" '
                 .containerDefinitions[0].image = $IMAGE
                 | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
                 | .containerDefinitions[0].environment = (
@@ -343,7 +344,7 @@ jobs:
                       {name:"REALTIME_WS_URL", value:"wss://api.invortoai.com/realtime/voice"},
                       {name:"WEBHOOK_BASE_URL", value:"https://api.invortoai.com/webhooks"},
                       {name:"TELEPHONY_WEBHOOK_BASE_URL", value:"https://api.invortoai.com/telephony"},
-                      {name:"SERVICE_NAME", value:$service}
+                      {name:"SERVICE_NAME", value:$SERVICE_NAME}
                     ]
                   )
               ')
