@@ -66,30 +66,6 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-latest
     needs: lint-and-typecheck
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: invorto_test
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-      
-      redis:
-        image: redis:7-alpine
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 6379:6379
     
     steps:
       - uses: actions/checkout@v4
@@ -99,7 +75,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-      
+
       - name: Install dependencies
         run: |
           npm ci
@@ -110,17 +86,9 @@ jobs:
           ls -la node_modules/.bin/jest || echo "Jest binary not found"
           npx jest --version || echo "Jest version check failed"
 
-      - name: Run database migrations
-        env:
-          DB_URL: postgresql://test:test@localhost:5432/invorto_test
-        run: |
-          npm run db:migrate || true
-      
       - name: Run tests
         env:
           NODE_ENV: test
-          DB_URL: postgresql://test:test@localhost:5432/invorto_test
-          REDIS_URL: redis://localhost:6379
           CI: true
         run: npm test
         timeout-minutes: 15
