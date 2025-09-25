@@ -41,8 +41,8 @@ FROM node:20-alpine
 WORKDIR /app
 
 # Copy built application
-COPY --from=0 /workspace/dist ./dist
-COPY --from=0 /workspace/package.json ./
+COPY --from=0 /workspace/services/webhooks/dist ./dist
+COPY --from=0 /workspace/services/webhooks/package.json ./
 
 # Install production dependencies only
 RUN npm ci --only=production
