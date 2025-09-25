@@ -8,8 +8,8 @@ COPY packages/*/package.json packages/*/
 COPY services/*/package.json services/*/
 COPY sdk/*/package.json sdk/*/
 
-# Install dependencies
-RUN npm ci --only=production
+# Install all dependencies (including dev for build)
+RUN npm ci
 
 # Copy source code
 COPY . .
@@ -28,7 +28,7 @@ WORKDIR /app
 COPY --from=0 /workspace/dist ./dist
 COPY --from=0 /workspace/package.json ./
 
-# Install production dependencies
+# Install production dependencies only
 RUN npm ci --only=production
 
 # Set environment variables
