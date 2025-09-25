@@ -28,6 +28,10 @@ RUN cd services/webhooks && npm install
 RUN cd services/workers && npm install
 RUN cd services/telephony && npm install
 
+# Build shared packages first
+RUN npm run -w packages/shared build
+RUN npm run -w packages/shared-core build
+
 # Build the application
 RUN npm run build
 
