@@ -40,12 +40,15 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy built application
+# Copy production node_modules from build stage (includes workspace deps like @invorto/shared)
+COPY --from=0 /workspace/node_modules ./node_modules
+# Copy built shared packages to node_modules
+COPY --from=0 /workspace/packages/shared ./node_modules/@invorto/shared
+COPY --from=0 /workspace/packages/shared-core ./node_modules/@invorto/shared-core
+# Copy built service
 COPY --from=0 /workspace/services/webhooks/dist ./dist
-COPY --from=0 /workspace/services/webhooks/package.json ./
-
-# Install production dependencies only
-RUN npm ci --only=production
+# Copy service package.json (start script already defined)
+COPY --from=0 /workspace/services/webhooks/package.json ./package.json
 
 # Set environment variables
 ENV NODE_ENV=production

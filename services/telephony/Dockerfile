@@ -18,6 +18,10 @@ COPY . .
 RUN rm -rf /workspace/dist
 
 
+# Install dependencies for shared packages specifically
+RUN npm install --workspace=packages/shared
+RUN npm install --workspace=packages/shared-core
+
 # Build shared packages first
 RUN npm run -w packages/shared build
 RUN npm run -w packages/shared-core build
@@ -30,26 +34,19 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy root package files for workspace resolution
-COPY --from=0 /workspace/package*.json ./
-
-# Create necessary directories
-RUN mkdir -p packages/shared services/telephony
-
-# Copy workspace package.json files
-COPY --from=0 /workspace/packages/shared/package.json ./packages/shared/
-COPY --from=0 /workspace/services/telephony/package.json ./services/telephony/
-
-# Copy built artifacts
-COPY --from=0 /workspace/packages/shared/dist ./packages/shared/dist
-COPY --from=0 /workspace/services/telephony/dist ./services/telephony/dist
-
-# Install production dependencies only (at root for workspaces)
-RUN npm ci --only=production
+# Copy production node_modules from build stage (includes workspace deps like @invorto/shared)
+COPY --from=0 /workspace/node_modules ./node_modules
+# Copy built shared packages to node_modules
+COPY --from=0 /workspace/packages/shared ./node_modules/@invorto/shared
+COPY --from=0 /workspace/packages/shared-core ./node_modules/@invorto/shared-core
+# Copy built service
+COPY --from=0 /workspace/services/telephony/dist ./dist
+# Copy service package.json (start script already defined)
+COPY --from=0 /workspace/services/telephony/package.json ./package.json
 
 # Set environment variables
 ENV NODE_ENV=production
 
 # Start the application
 EXPOSE 8085
-CMD ["node", "services/telephony/dist/index.js"]
+CMD ["node", "dist/index.js"]
