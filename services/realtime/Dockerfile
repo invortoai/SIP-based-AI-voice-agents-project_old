@@ -32,6 +32,9 @@ RUN cd services/telephony && npm install
 RUN npm run -w packages/shared build
 RUN npm run -w packages/shared-core build
 
+# Install dependencies for this service
+RUN cd services/realtime && npm install
+
 # Build only this service
 RUN npm run -w services/realtime build
 

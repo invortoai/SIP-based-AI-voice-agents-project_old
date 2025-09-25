@@ -26,6 +26,9 @@ RUN npm install --workspace=packages/shared-core
 RUN npm run -w packages/shared build
 RUN npm run -w packages/shared-core build
 
+# Install dependencies for this service
+RUN cd services/telephony && npm install
+
 # Build only this service
 RUN npm run -w services/telephony build
 
