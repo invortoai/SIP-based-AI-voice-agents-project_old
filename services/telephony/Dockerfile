@@ -26,8 +26,8 @@ RUN npm install --workspace=packages/shared-core
 RUN npm run -w packages/shared build
 RUN npm run -w packages/shared-core build
 
-# Build the application
-RUN npm run build
+# Build only this service
+RUN npm run -w services/telephony build
 
 # Production stage
 FROM node:20-alpine

@@ -32,8 +32,8 @@ RUN cd services/telephony && npm install
 RUN npm run -w packages/shared build
 RUN npm run -w packages/shared-core build
 
-# Build the application
-RUN npm run build
+# Build only this service
+RUN npm run -w services/realtime build
 
 # Production stage
 FROM node:20-alpine
