@@ -21,6 +21,8 @@ RUN cd packages/shared-core && npm install
 # Build the application
 RUN npm run -w packages/shared build
 RUN npm run -w packages/shared-core build
+# Install service dependencies
+RUN cd services/telephony && npm install
 RUN npm run -w services/telephony build
 
 # Production stage
