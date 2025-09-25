@@ -17,16 +17,6 @@ COPY . .
 # Clean up any existing dist directories to prevent cache conflicts
 RUN rm -rf /workspace/dist
 
-# Install dependencies for shared packages specifically
-RUN cd packages/shared && npm install
-RUN cd packages/shared-core && npm install
-
-# Install dependencies for each service
-RUN cd services/api && npm install
-RUN cd services/realtime && npm install
-RUN cd services/webhooks && npm install
-RUN cd services/workers && npm install
-RUN cd services/telephony && npm install
 
 # Build shared packages first
 RUN npm run -w packages/shared build
@@ -40,11 +30,21 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy built application
-COPY --from=0 /workspace/services/telephony/dist ./dist
-COPY --from=0 /workspace/services/telephony/package.json ./
+# Copy root package files for workspace resolution
+COPY --from=0 /workspace/package*.json ./
 
-# Install production dependencies only
+# Create necessary directories
+RUN mkdir -p packages/shared services/telephony
+
+# Copy workspace package.json files
+COPY --from=0 /workspace/packages/shared/package.json ./packages/shared/
+COPY --from=0 /workspace/services/telephony/package.json ./services/telephony/
+
+# Copy built artifacts
+COPY --from=0 /workspace/packages/shared/dist ./packages/shared/dist
+COPY --from=0 /workspace/services/telephony/dist ./services/telephony/dist
+
+# Install production dependencies only (at root for workspaces)
 RUN npm ci --only=production
 
 # Set environment variables
@@ -52,5 +52,4 @@ ENV NODE_ENV=production
 
 # Start the application
 EXPOSE 8085
-CMD ["node", "dist/index.js"]
-
+CMD ["node", "services/telephony/dist/index.js"]
