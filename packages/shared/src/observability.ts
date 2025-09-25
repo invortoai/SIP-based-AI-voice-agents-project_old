@@ -13,6 +13,17 @@ import { Langfuse } from 'langfuse';
 import winston from 'winston';
 import { LoggingWinston } from '@google-cloud/logging-winston';
 
+// Dynamic import for CloudWatch transport (only in production)
+let CloudWatchTransport: any = null;
+if (process.env.NODE_ENV === 'production') {
+  // Use dynamic import for conditional loading
+  import('winston-cloudwatch').then((module) => {
+    CloudWatchTransport = module.default || module;
+  }).catch((error) => {
+    console.warn('Failed to load winston-cloudwatch:', error);
+  });
+}
+
 // Langfuse client for LLM observability
 let langfuseClient: Langfuse | null = null;
 
@@ -38,17 +49,25 @@ export const logger = winston.createLogger({
   ],
 });
 
-// Add CloudWatch transport in production
+// Add CloudWatch transport in production (async initialization)
 if (process.env.NODE_ENV === 'production') {
-  const CloudWatchTransport = require('winston-cloudwatch');
-  logger.add(
-    new CloudWatchTransport({
-      logGroupName: `/aws/ecs/${process.env.SERVICE_NAME}`,
-      logStreamName: process.env.HOSTNAME || 'default',
-      awsRegion: process.env.AWS_REGION || 'ap-south-1',
-      messageFormatter: (item: any) => JSON.stringify(item),
-    })
-  );
+  // Initialize CloudWatch transport asynchronously
+  setImmediate(async () => {
+    try {
+      const cloudwatchModule = await import('winston-cloudwatch');
+      const CloudWatchTransportClass = cloudwatchModule.default || cloudwatchModule;
+      logger.add(
+        new CloudWatchTransportClass({
+          logGroupName: `/aws/ecs/${process.env.SERVICE_NAME}`,
+          logStreamName: process.env.HOSTNAME || 'default',
+          awsRegion: process.env.AWS_REGION || 'ap-south-1',
+          messageFormatter: (item: any) => JSON.stringify(item),
+        })
+      );
+    } catch (error) {
+      console.warn('Failed to initialize CloudWatch transport:', error);
+    }
+  });
 }
 
 // Initialize OpenTelemetry
