@@ -336,13 +336,14 @@ jobs:
                 | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
                 | .containerDefinitions[0].environment = (
                     ( .containerDefinitions[0].environment // [] )
-                    | map(select(.name as $n | ($n != "PUBLIC_BASE_URL" and $n != "API_BASE_URL" and $n != "REALTIME_WS_URL" and $n != "WEBHOOK_BASE_URL" and $n != "TELEPHONY_WEBHOOK_BASE_URL")))
+                    | map(select(.name as $n | ($n != "PUBLIC_BASE_URL" and $n != "API_BASE_URL" and $n != "REALTIME_WS_URL" and $n != "WEBHOOK_BASE_URL" and $n != "TELEPHONY_WEBHOOK_BASE_URL" and $n != "SERVICE_NAME")))
                     + [
                       {name:"PUBLIC_BASE_URL", value:"https://api.invortoai.com"},
                       {name:"API_BASE_URL", value:"https://api.invortoai.com/v1"},
                       {name:"REALTIME_WS_URL", value:"wss://api.invortoai.com/realtime/voice"},
                       {name:"WEBHOOK_BASE_URL", value:"https://api.invortoai.com/webhooks"},
-                      {name:"TELEPHONY_WEBHOOK_BASE_URL", value:"https://api.invortoai.com/telephony"}
+                      {name:"TELEPHONY_WEBHOOK_BASE_URL", value:"https://api.invortoai.com/telephony"},
+                      {name:"SERVICE_NAME", value:$service}
                     ]
                   )
               ')
