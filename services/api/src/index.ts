@@ -76,7 +76,7 @@ let redis!: RedisType;
 
 // Initialize external deps before server starts listening
 app.addHook("onReady", async () => {
-  const dbUrl = (await resolveSecret(process.env.AWS_SECRETS_DB_URL)) || process.env.DB_URL;
+  const dbUrl = process.env.SUPABASE_URL || process.env.DB_URL;
   const redisUrlEnv = (await resolveSecret(process.env.AWS_SECRETS_REDIS_URL)) || process.env.REDIS_URL || "redis://localhost:6379";
 
   // In test runs, avoid opening real DB sockets which can timeout or keep open handles
