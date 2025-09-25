@@ -1,7 +1,6 @@
 // Universal Document Processing System with RAG
 import { FastifyInstance } from 'fastify';
 import { createClient } from '@supabase/supabase-js';
-import pdfParse from 'pdf-parse';
 import mammoth from 'mammoth'; // For DOCX
 import { OpenAI } from 'openai';
 import { s3Artifacts } from './s3-helpers.js';
@@ -15,7 +14,6 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // Supported document types and their processors
 const DOCUMENT_PROCESSORS: Record<string, (buffer: Buffer) => Promise<string>> = {
-  'pdf': processPdf,
   'txt': processText,
   'md': processText,
   'json': processText,
@@ -222,13 +220,9 @@ export async function setupDocumentTools(app: FastifyInstance) {
 
 // Document processing functions
 async function processPdf(buffer: Buffer): Promise<string> {
-  try {
-    const data = await pdfParse(buffer);
-    return data.text;
-  } catch (error) {
-    console.error('PDF processing failed:', error);
-    return 'Error: Could not extract text from PDF';
-  }
+  // PDF processing temporarily disabled due to library compatibility issues
+  console.warn('PDF processing is currently disabled');
+  return 'Error: PDF processing is currently not available. Please convert to DOCX or TXT format.';
 }
 
 async function processText(buffer: Buffer): Promise<string> {
