@@ -21,6 +21,12 @@ RUN rm -rf /workspace/dist
 RUN cd packages/shared && npm install
 RUN cd packages/shared-core && npm install
 
+# Install dependencies for each service
+RUN cd services/realtime && npm install
+RUN cd services/webhooks && npm install
+RUN cd services/workers && npm install
+RUN cd services/telephony && npm install
+
 # Build the application
 RUN npm run build
 
