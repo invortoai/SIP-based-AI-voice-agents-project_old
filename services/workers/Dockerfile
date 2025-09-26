@@ -37,6 +37,8 @@ RUN cd packages/shared && npm install
 # Build shared packages first
 RUN npm run -w packages/shared build
 RUN npm run -w packages/shared-core build
+# Install dependencies for this service
+RUN cd services/workers && npm install
 # Then build the service
 RUN npm run -w services/workers build
 
