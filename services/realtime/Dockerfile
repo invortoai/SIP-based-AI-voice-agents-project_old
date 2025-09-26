@@ -39,8 +39,11 @@ RUN npm run -w packages/shared build
 RUN npm run -w packages/shared-core build
 # Install dependencies for this service
 RUN cd services/realtime && npm install
-# Then build the service
-RUN npm run -w services/realtime build
+# Make sure shared packages are linked
+RUN cd services/realtime && npm install ../../packages/shared
+RUN cd services/realtime && npm install ../../packages/shared-core
+# Then build the service from the service directory
+RUN cd services/realtime && npm run build
 
 # Runtime image
 FROM node:20-alpine AS runtime
