@@ -4,11 +4,11 @@ import websocket from "@fastify/websocket";
 import fastifyJwt from "@fastify/jwt";
 import { WebSocket, RawData, WebSocketServer } from "ws";
 import crypto from "crypto";
-import { AgentRuntime } from "./runtime/agent";
-import { TimelinePublisher } from "./timeline/redis";
+import { AgentRuntime } from "./runtime/agent.js";
+import { TimelinePublisher } from "./timeline/redis.js";
 import Redis from "ioredis";
-import { JitterBuffer } from "./runtime/jitterBuffer";
-import { EnergyMeter } from "./runtime/energyMeter";
+import { JitterBuffer } from "./runtime/jitterBuffer.js";
+import { EnergyMeter } from "./runtime/energyMeter.js";
 import type { WsInbound, WsOutbound } from "@invorto/shared";
 // simplified runtime: remove external observability/security dependencies
 
