@@ -40,8 +40,20 @@ module.exports = {
     '^packages/(.*)$': '<rootDir>/packages/$1/dist',
     // Map .js imports to .ts files for local project modules only
     '^(sdk|services|packages)/(.*)\\.js$': '<rootDir>/$1/$2.ts',
-    // Map relative .js imports to .ts files for testing - ES module support
-    '^(\\.{1,2}/.*)\\.js$': '$1.ts'
+    // Map relative .js imports to .ts files for realtime service
+    '^(\\./runtime/agent)\\.js$': '$1.ts',
+    '^(\\./timeline/redis)\\.js$': '$1.ts',
+    '^(\\./runtime/jitterBuffer)\\.js$': '$1.ts',
+    '^(\\./runtime/energyMeter)\\.js$': '$1.ts',
+    '^(\\./adapters/asr/deepgram_ws)\\.js$': '$1.ts',
+    '^(\\./adapters/llm/openai)\\.js$': '$1.ts',
+    '^(\\./adapters/tts/deepgram)\\.js$': '$1.ts',
+    '^(\\./timeline/redis)\\.js$': '$1.ts',
+    '^(\\./runtime/jitterBuffer)\\.js$': '$1.ts',
+    '^(\\./runtime/energyMeter)\\.js$': '$1.ts',
+    '^(\\./runtime/audioAnalyzer)\\.js$': '$1.ts',
+    '^(\\./runtime/endpointing)\\.js$': '$1.ts',
+    '^(\\./tools/registry)\\.js$': '$1.ts'
   },
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   testTimeout: 60000,
@@ -63,6 +75,8 @@ module.exports = {
   },
   // Enable ESM-specific configurations for .ts files
   extensionsToTreatAsEsm: ['.ts'],
+  // Custom resolver to handle ES module imports with .js extensions
+  resolver: '<rootDir>/tests/resolver.js',
   // CI-specific optimizations
   ...(process.env.CI && {
     // Reduce memory usage in CI
