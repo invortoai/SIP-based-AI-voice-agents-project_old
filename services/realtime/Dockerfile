@@ -54,8 +54,6 @@ COPY --from=build /workspace/node_modules ./node_modules
 # Copy built shared packages to node_modules
 COPY --from=build /workspace/packages/shared ./node_modules/@invorto/shared
 COPY --from=build /workspace/packages/shared-core ./node_modules/@invorto/shared-core
-# Debug: list contents of dist directory before copying
-RUN ls -la /workspace/services/realtime/dist/
 # Copy built service
 COPY --from=build /workspace/services/realtime/dist/ ./dist/
 # Copy service package.json (start script already defined)
