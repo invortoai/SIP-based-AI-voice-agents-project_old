@@ -72,6 +72,40 @@ resource "aws_iam_role_policy_attachment" "exec_attach" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+# IAM policy for task role to access AWS Secrets Manager
+resource "aws_iam_role_policy" "task_secrets_policy" {
+  name = "${var.service_name}-secrets-policy"
+  role = aws_iam_role.task_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = [
+          "arn:aws:secretsmanager:*:*:secret:SUPABASE_URL*",
+          "arn:aws:secretsmanager:*:*:secret:SUPABASE_SERVICE_ROLE*",
+          "arn:aws:secretsmanager:*:*:secret:OPENAI_API_KEY*",
+          "arn:aws:secretsmanager:*:*:secret:DEEPGRAM_API_KEY*",
+          "arn:aws:secretsmanager:*:*:secret:ELEVENLABS_API_KEY*",
+          "arn:aws:secretsmanager:*:*:secret:WEBHOOK_SECRET*",
+          "arn:aws:secretsmanager:*:*:secret:JWT_PUBLIC_KEY*",
+          "arn:aws:secretsmanager:*:*:secret:REDIS_URL*",
+          "arn:aws:secretsmanager:*:*:secret:S3_BUCKET_RECORDINGS*",
+          "arn:aws:secretsmanager:*:*:secret:S3_BUCKET_TRANSCRIPTS*",
+          "arn:aws:secretsmanager:*:*:secret:S3_BUCKET_DOCUMENTS*",
+          "arn:aws:secretsmanager:*:*:secret:SES_SENDER_EMAIL*",
+          "arn:aws:secretsmanager:*:*:secret:api-keys*",
+          "arn:aws:secretsmanager:*:*:secret:ip-allowlist*"
+        ]
+      }
+    ]
+  })
+}
+
 resource "aws_ecs_task_definition" "task" {
   family                   = var.service_name
   network_mode             = "awsvpc"

@@ -56,16 +56,34 @@ if (process.env.NODE_ENV === 'production') {
     try {
       const cloudwatchModule = await import('winston-cloudwatch');
       const CloudWatchTransportClass = cloudwatchModule.default || cloudwatchModule;
-      logger.add(
-        new CloudWatchTransportClass({
-          logGroupName: `/aws/ecs/${process.env.SERVICE_NAME}`,
-          logStreamName: process.env.HOSTNAME || 'default',
-          awsRegion: process.env.AWS_REGION || 'ap-south-1',
-          messageFormatter: (item: any) => JSON.stringify(item),
-        })
-      );
+
+      // Create transport with error handling
+      const transport = new CloudWatchTransportClass({
+        logGroupName: `/aws/ecs/${process.env.SERVICE_NAME}`,
+        logStreamName: process.env.HOSTNAME || 'default',
+        awsRegion: process.env.AWS_REGION || 'ap-south-1',
+        messageFormatter: (item: any) => JSON.stringify(item),
+      });
+
+      // Add error handler to transport
+      transport.on('error', (error: Error) => {
+        logger.warn('CloudWatch transport error, falling back to console logging', {
+          error: error.message,
+          service: process.env.SERVICE_NAME
+        });
+        // Remove the failing transport
+        logger.remove(transport);
+      });
+
+      // Add transport to logger
+      logger.add(transport);
+      logger.info('CloudWatch transport initialized');
+
     } catch (error) {
-      console.warn('Failed to initialize CloudWatch transport:', error);
+      logger.warn('Failed to initialize CloudWatch transport, using console logging only', {
+        error: (error as Error).message,
+        service: process.env.SERVICE_NAME
+      });
     }
   });
 }

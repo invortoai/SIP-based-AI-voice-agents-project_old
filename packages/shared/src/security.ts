@@ -26,16 +26,16 @@ export async function getSecret(secretName: string): Promise<string> {
     const command = new GetSecretValueCommand({
       SecretId: secretName,
     });
-    
+
     const response = await secretsClient.send(command);
     const secretValue = response.SecretString || '';
-    
+
     // Cache the secret
     secretsCache.set(secretName, {
       value: secretValue,
       expiry: Date.now() + CACHE_TTL,
     });
-    
+
     return secretValue;
   } catch (error) {
     console.error(`Failed to retrieve secret ${secretName}:`, error);
@@ -71,7 +71,7 @@ export class IPAllowlistManager {
     // Load from environment or secrets manager
     const allowlistConfig = process.env.IP_ALLOWLIST || '';
     const ranges = allowlistConfig.split(',').filter(Boolean);
-    
+
     // Try to load from AWS Secrets Manager
     try {
       const secretAllowlist = await getSecretJson<{ ranges: string[]; ips: string[]; tokens: string[] }>('ip-allowlist');
