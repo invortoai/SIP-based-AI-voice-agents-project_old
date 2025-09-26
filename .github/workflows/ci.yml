@@ -333,6 +333,35 @@ jobs:
             echo "skip_api=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Check production-realtime Health
+        id: realtime-health-check
+        run: |
+          # Check if production-realtime is healthy
+          SERVICE_INFO=$(aws ecs describe-services \
+            --cluster production-invorto-cluster \
+            --services production-realtime \
+            --query 'services[0]' \
+            --output json \
+            --region ${{ env.AWS_REGION }})
+
+          RUNNING_COUNT=$(echo "$SERVICE_INFO" | jq -r '.runningCount // 0')
+          DESIRED_COUNT=$(echo "$SERVICE_INFO" | jq -r '.desiredCount // 0')
+          STATUS=$(echo "$SERVICE_INFO" | jq -r '.status // "UNKNOWN"')
+          DEPLOYMENT_STATUS=$(echo "$SERVICE_INFO" | jq -r '.deployments[0].rolloutState // "UNKNOWN"')
+
+          echo "Realtime Service Status: $STATUS"
+          echo "Running Count: $RUNNING_COUNT"
+          echo "Desired Count: $DESIRED_COUNT"
+          echo "Deployment Status: $DEPLOYMENT_STATUS"
+
+          if [[ "$RUNNING_COUNT" -eq "$DESIRED_COUNT" && "$STATUS" == "ACTIVE" && "$DEPLOYMENT_STATUS" == "COMPLETED" ]]; then
+            echo "✅ production-realtime is healthy, skipping deployment"
+            echo "skip_realtime=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "❌ production-realtime needs deployment"
+            echo "skip_realtime=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Deploy to ECS with Blue/Green
         env:
           ECR_REGISTRY: ${{ steps.login-ecr-prod.outputs.registry }}
@@ -407,6 +436,8 @@ jobs:
           for service in api realtime webhooks workers telephony-ecs; do
             if [[ "$service" == "api" && "${{ steps.api-health-check.outputs.skip_api }}" == "true" ]]; then
               echo "⏭️  Skipping production-api deployment (already healthy)"
+            elif [[ "$service" == "realtime" && "${{ steps.realtime-health-check.outputs.skip_realtime }}" == "true" ]]; then
+              echo "⏭️  Skipping production-realtime deployment (already healthy)"
             else
               echo "🔄 Deploying ${service}..."
               update_service ${service} $CLUSTER_NAME

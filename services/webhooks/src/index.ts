@@ -45,7 +45,7 @@ const piiRedactor = new PIIRedactor();
 
 const isTest = !!process.env.JEST_WORKER_ID || (process.env.NODE_ENV || "") === "test";
 export const app: FastifyInstance = Fastify({
-  logger: isTest ? true : {
+  logger: isTest ? {
     level: process.env.LOG_LEVEL || "info",
     transport: {
       target: "pino-pretty",
@@ -54,7 +54,7 @@ export const app: FastifyInstance = Fastify({
         ignore: "pid,hostname",
       },
     },
-  },
+  } : true, // Use JSON logging in production (no pino-pretty dependency needed)
 });
 
 // CORS: allow requests from the single-domain public origin
