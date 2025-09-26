@@ -39,8 +39,6 @@ RUN npm run -w packages/shared build
 RUN npm run -w packages/shared-core build
 # Then build the service
 RUN npm run -w services/realtime build
-# Prune dev deps after build to slim runtime node_modules
-RUN npm prune --omit=dev
 
 # Runtime image
 FROM node:20-alpine AS runtime
@@ -51,8 +49,10 @@ COPY --from=build /workspace/node_modules ./node_modules
 # Copy built shared packages to node_modules
 COPY --from=build /workspace/packages/shared ./node_modules/@invorto/shared
 COPY --from=build /workspace/packages/shared-core ./node_modules/@invorto/shared-core
+# Debug: list contents of dist directory before copying
+RUN ls -la /workspace/services/realtime/dist/
 # Copy built service
-COPY --from=build /workspace/services/realtime/dist ./dist
+COPY --from=build /workspace/services/realtime/dist/ ./dist/
 # Copy service package.json (start script already defined)
 COPY --from=build /workspace/services/realtime/package.json ./package.json
 EXPOSE 8081

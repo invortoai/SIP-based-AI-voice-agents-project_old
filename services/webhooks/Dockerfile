@@ -39,8 +39,6 @@ RUN npm run -w packages/shared build
 RUN npm run -w packages/shared-core build
 # Then build the service
 RUN npm run -w services/webhooks build
-# Prune dev deps after build to slim runtime node_modules
-RUN npm prune --omit=dev
 
 # Runtime image
 FROM node:20-alpine AS runtime
