@@ -1,7 +1,7 @@
 const { pathsToModuleNameMapper } = require('ts-jest');
 
 module.exports = {
-  preset: 'ts-jest',
+  preset: 'ts-jest/presets/default-esm',
   testEnvironment: 'node',
   roots: ['<rootDir>/tests'],
   // Only run unit and integration test suites by default; exclude e2e/performance/load by pattern
@@ -39,7 +39,9 @@ module.exports = {
     '^services/(.*)$': '<rootDir>/services/$1/dist',
     '^packages/(.*)$': '<rootDir>/packages/$1/dist',
     // Map .js imports to .ts files for local project modules only
-    '^(sdk|services|packages)/(.*)\\.js$': '<rootDir>/$1/$2.ts'
+    '^(sdk|services|packages)/(.*)\\.js$': '<rootDir>/$1/$2.ts',
+    // Map relative .js imports to .ts files for testing - ES module support
+    '^(\\.{1,2}/.*)\\.js$': '$1.ts'
   },
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   testTimeout: 60000,
@@ -52,15 +54,15 @@ module.exports = {
   testEnvironmentOptions: {
     // Ensure proper cleanup of async operations
   },
-  // Use ts-jest without ESM to avoid module resolution issues
+  // Configure ts-jest with ESM support for proper module resolution
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
       tsconfig: '<rootDir>/tests/tsconfig.json',
-      useESM: false
+      useESM: true
     }]
   },
-  // Remove ESM-specific configurations that were causing issues
-  extensionsToTreatAsEsm: [],
+  // Enable ESM-specific configurations for .ts files
+  extensionsToTreatAsEsm: ['.ts'],
   // CI-specific optimizations
   ...(process.env.CI && {
     // Reduce memory usage in CI
