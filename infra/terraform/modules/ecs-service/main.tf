@@ -72,7 +72,7 @@ resource "aws_iam_role_policy_attachment" "exec_attach" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-# IAM policy for task role to access AWS Secrets Manager
+# IAM policy for task role to access AWS Secrets Manager and CloudWatch Logs
 resource "aws_iam_role_policy" "task_secrets_policy" {
   name = "${var.service_name}-secrets-policy"
   role = aws_iam_role.task_role.id
@@ -101,6 +101,17 @@ resource "aws_iam_role_policy" "task_secrets_policy" {
           "arn:aws:secretsmanager:*:*:secret:api-keys*",
           "arn:aws:secretsmanager:*:*:secret:ip-allowlist*"
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:DescribeLogStreams",
+          "logs:DescribeLogGroups"
+        ]
+        Resource = "arn:aws:logs:*:*:*"
       }
     ]
   })
