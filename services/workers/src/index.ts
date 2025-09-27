@@ -39,9 +39,9 @@ const redisQ: RedisType = new (Redis as any)(redisUrl);
 
 // Get bucket names from environment or secrets
 async function getBucketNames() {
-  const recordingsBucket = process.env.S3_BUCKET_RECORDINGS || await getSecret('S3_BUCKET_RECORDINGS') || 'invorto-recordings';
-  const transcriptsBucket = process.env.S3_BUCKET_TRANSCRIPTS || await getSecret('S3_BUCKET_TRANSCRIPTS') || 'invorto-transcripts';
-  const documentsBucket = process.env.S3_BUCKET_DOCUMENTS || await getSecret('S3_BUCKET_DOCUMENTS') || 'invorto-documents';
+  const recordingsBucket = process.env.S3_BUCKET_RECORDINGS || await getSecret('S3_BUCKET_RECORDINGS') || 'invorto-production-recordings';
+  const transcriptsBucket = process.env.S3_BUCKET_TRANSCRIPTS || await getSecret('S3_BUCKET_TRANSCRIPTS') || 'invorto-production-transcripts';
+  const documentsBucket = process.env.S3_BUCKET_DOCUMENTS || await getSecret('S3_BUCKET_DOCUMENTS') || 'invorto-production-documents';
 
   return {
     recordings: recordingsBucket,
