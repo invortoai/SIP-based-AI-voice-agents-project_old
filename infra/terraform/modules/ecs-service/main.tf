@@ -99,7 +99,8 @@ resource "aws_iam_role_policy" "task_secrets_policy" {
           "arn:aws:secretsmanager:*:*:secret:S3_BUCKET_DOCUMENTS*",
           "arn:aws:secretsmanager:*:*:secret:SES_SENDER_EMAIL*",
           "arn:aws:secretsmanager:*:*:secret:api-keys*",
-          "arn:aws:secretsmanager:*:*:secret:ip-allowlist*"
+          "arn:aws:secretsmanager:*:*:secret:ip-allowlist*",
+          "arn:aws:secretsmanager:*:*:secret:*"
         ]
       },
       {
