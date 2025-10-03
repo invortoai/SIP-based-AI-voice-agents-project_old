@@ -243,6 +243,7 @@ const suspiciousIPs = new Map<string, { count: number; firstSeen: number; lastSe
 const SUSPICIOUS_IP_THRESHOLD = 10; // requests per minute
 const SUSPICIOUS_IP_WINDOW = 60000; // 1 minute in ms
 const BLOCK_DURATION = 300000; // 5 minutes in ms
+const MAX_SUSPICIOUS_IPS = 10000; // Limit map size to prevent memory leaks
 // Circuit breaker for telephony service
 interface CircuitBreakerState {
   state: 'closed' | 'open' | 'half-open';
@@ -343,6 +344,16 @@ function isAllowedIP(ip: string, allowedList: string[]): boolean {
 
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
+
+  // Clean up old entries periodically to prevent memory leaks
+  if (suspiciousIPs.size > MAX_SUSPICIOUS_IPS) {
+    for (const [ipKey, data] of suspiciousIPs.entries()) {
+      if (now - data.lastSeen > SUSPICIOUS_IP_WINDOW * 2) {
+        suspiciousIPs.delete(ipKey);
+      }
+    }
+  }
+
   const data = suspiciousIPs.get(ip);
 
   if (!data) {

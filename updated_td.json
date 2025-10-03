@@ -1,0 +1,125 @@
+﻿{
+    "containerDefinitions":  [
+                                 {
+                                     "name":  "workers",
+                                     "image":  "820242920118.dkr.ecr.ap-south-1.amazonaws.com/invorto-workers:latest",
+                                     "cpu":  0,
+                                     "portMappings":  [
+                                                          {
+                                                              "containerPort":  8083,
+                                                              "hostPort":  8083,
+                                                              "protocol":  "tcp"
+                                                          }
+                                                      ],
+                                     "essential":  true,
+                                     "environment":  [
+                                                         {
+                                                             "name":  "API_BASE_URL",
+                                                             "value":  "https://api.invortoai.com/v1"
+                                                         },
+                                                         {
+                                                             "name":  "SERVICE_NAME",
+                                                             "value":  "workers"
+                                                         },
+                                                         {
+                                                             "name":  "WEBHOOK_BASE_URL",
+                                                             "value":  "https://api.invortoai.com/webhooks"
+                                                         },
+                                                         {
+                                                             "name":  "PORT",
+                                                             "value":  "8083"
+                                                         },
+                                                         {
+                                                             "name":  "REALTIME_WS_URL",
+                                                             "value":  "wss://api.invortoai.com/realtime/voice"
+                                                         },
+                                                         {
+                                                             "name":  "NODE_ENV",
+                                                             "value":  "production"
+                                                         },
+                                                         {
+                                                             "name":  "PUBLIC_BASE_URL",
+                                                             "value":  "https://api.invortoai.com"
+                                                         },
+                                                         {
+                                                             "name":  "TELEPHONY_WEBHOOK_BASE_URL",
+                                                             "value":  "https://api.invortoai.com/telephony"
+                                                         },
+                                                         {
+                                                             "name":  "REDIS_URL",
+                                                             "value":  "redis://master.production-invorto-redis.p7a5gs.aps1.cache.amazonaws.com:6379"
+                                                         },
+                                                         {
+                                                             "name":  "S3_BUCKET_TRANSCRIPTS",
+                                                             "value":  "invorto-production-transcripts"
+                                                         },
+                                                         {
+                                                             "name":  "S3_BUCKET_RECORDINGS",
+                                                             "value":  "invorto-production-recordings"
+                                                         },
+                                                         {
+                                                             "name":  "S3_BUCKET_DOCUMENTS",
+                                                             "value":  "invorto-production-metrics"
+                                                         }
+                                                     ],
+                                     "mountPoints":  [
+
+                                                     ],
+                                     "volumesFrom":  [
+
+                                                     ],
+                                     "secrets":  [
+                                                     {
+                                                         "name":  "SUPABASE_URL",
+                                                         "valueFrom":  "arn:aws:secretsmanager:ap-south-1:820242920118:secret:production/supabase_url-PZbInj"
+                                                     },
+                                                     {
+                                                         "name":  "SUPABASE_SERVICE_ROLE",
+                                                         "valueFrom":  "arn:aws:secretsmanager:ap-south-1:820242920118:secret:production/supabase_service_role-KKfS6i"
+                                                     },
+                                                     {
+                                                         "name":  "OPENAI_API_KEY",
+                                                         "valueFrom":  "arn:aws:secretsmanager:ap-south-1:820242920118:secret:production/openai_api_key-faDh3T"
+                                                     },
+                                                     {
+                                                         "name":  "DEEPGRAM_API_KEY",
+                                                         "valueFrom":  "arn:aws:secretsmanager:ap-south-1:820242920118:secret:production/deepgram_api_key-GEf7KF"
+                                                     },
+                                                     {
+                                                         "name":  "WEBHOOK_SECRET",
+                                                         "valueFrom":  "arn:aws:secretsmanager:ap-south-1:820242920118:secret:production/webhook_secret-v27C1R"
+                                                     },
+                                                     {
+                                                         "name":  "JWT_PUBLIC_KEY",
+                                                         "valueFrom":  "arn:aws:secretsmanager:ap-south-1:820242920118:secret:production/jwt_public_key-hLgI2I"
+                                                     }
+                                                 ],
+                                     "logConfiguration":  {
+                                                              "logDriver":  "awslogs",
+                                                              "options":  {
+                                                                              "awslogs-group":  "/ecs/production-invorto-workers",
+                                                                              "awslogs-region":  "ap-south-1",
+                                                                              "awslogs-stream-prefix":  "production-workers"
+                                                                          }
+                                                          },
+                                     "systemControls":  [
+
+                                                        ]
+                                 }
+                             ],
+    "family":  "production-workers",
+    "taskRoleArn":  "arn:aws:iam::820242920118:role/production-workers-task-role",
+    "executionRoleArn":  "arn:aws:iam::820242920118:role/production-workers-exec-role",
+    "networkMode":  "awsvpc",
+    "volumes":  [
+
+                ],
+    "placementConstraints":  [
+
+                             ],
+    "requiresCompatibilities":  [
+                                    "FARGATE"
+                                ],
+    "cpu":  "256",
+    "memory":  "512"
+}

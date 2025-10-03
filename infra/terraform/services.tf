@@ -372,7 +372,7 @@ module "svc_api" {
   environment = {
     NODE_ENV           = "production"
     PORT               = "8080"
-    REDIS_URL          = "redis://${module.redis.endpoint}"
+    REDIS_URL          = "redis://${var.redis_endpoint}"
     PUBLIC_BASE_URL    = "https://${var.domain_name}"
     REALTIME_WS_URL    = "wss://api.${var.domain_name}/v1/realtime"
     TENANT_WEBHOOK_URL = "https://api.${var.domain_name}/webhooks"
@@ -410,7 +410,7 @@ module "svc_realtime" {
   environment = {
     NODE_ENV        = "production"
     PORT            = "8081"
-    REDIS_URL       = "redis://${module.redis.endpoint}"
+    REDIS_URL       = "redis://${var.redis_endpoint}"
     PUBLIC_BASE_URL = "https://${var.domain_name}"
     REALTIME_WS_URL = "wss://api.${var.domain_name}/v1/realtime"
   }
@@ -447,7 +447,7 @@ module "svc_webhooks" {
   environment = {
     NODE_ENV  = "production"
     PORT      = "8082"
-    REDIS_URL = "redis://${module.redis.endpoint}"
+    REDIS_URL = "redis://${var.redis_endpoint}"
   }
 
   secrets = [
@@ -481,7 +481,10 @@ module "svc_workers" {
   environment = {
     NODE_ENV  = "production"
     PORT      = "8083"
-    REDIS_URL = "redis://${module.redis.endpoint}"
+    REDIS_URL = "redis://${var.redis_endpoint}"
+    S3_BUCKET_TRANSCRIPTS  = var.s3_bucket_transcripts
+    S3_BUCKET_RECORDINGS   = var.s3_bucket_recordings
+    S3_BUCKET_DOCUMENTS    = var.s3_bucket_documents
   }
 
   secrets = [
@@ -515,7 +518,7 @@ module "svc_telephony" {
   environment = {
     NODE_ENV  = "production"
     PORT      = "8085"
-    REDIS_URL = "redis://${module.redis.endpoint}"
+    REDIS_URL = "redis://${var.redis_endpoint}"
   }
 
   secrets = [

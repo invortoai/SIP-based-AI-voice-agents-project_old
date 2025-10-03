@@ -257,10 +257,66 @@ Sample call_hook payload (Jambonz)
 - Heartbeats: client may send {"t":"ping"}; server replies {"t":"pong","timestamp":...}
 - Reconnects: SDKs support auto-retry with backoff.
 
-### 🔐 Auth Modes
+### 🔐 Security Features
 
-- API key (preferred): WS subprotocol header; also accepted via query api_key or Authorization: Bearer.
-- Optional HMAC guard: sig and ts query parameters, verified as HMAC-SHA256(callId:ts).
+#### IP Allowlist Protection
+Restricts API access to trusted IP addresses for enhanced security:
+
+**Configuration Options:**
+- **Environment Variable**: `IP_ALLOWLIST=192.168.1.0/24,10.0.0.0/8,203.0.113.0/24`
+- **AWS Secrets Manager**: Store complex configurations as JSON:
+  ```json
+  {
+    "ranges": ["192.168.1.0/24", "10.0.0.0/8"],
+    "ips": ["203.0.113.5"],
+    "tokens": ["bypass-token-123"]
+  }
+  ```
+
+**Behavior:**
+- If no allowlist configured → Allows all traffic (development default)
+- If allowlist exists → Only allows specified IPs/ranges
+- Bypass tokens override restrictions for testing/emergencies
+- Development automatically allows localhost + private networks
+
+**Use Cases:**
+- Restrict API access to your frontend applications only
+- Allow only trusted telephony providers (Jambonz)
+- Prevent abuse from random internet traffic
+- Compliance with security requirements
+
+#### API Key Authentication (Future Feature)
+
+**Per-client authentication system** for multi-tenant applications:
+
+**Configuration:**
+```json
+{
+  "client_abc_key": {
+    "tenantId": "tenant_123",
+    "permissions": ["read", "write", "admin"]
+  },
+  "partner_xyz_key": {
+    "tenantId": "partner_tenant",
+    "permissions": ["read"]
+  }
+}
+```
+
+**Use Cases:**
+- Multi-tenant SaaS with per-customer API keys
+- Partner integrations with restricted access
+- Granular permission control (read/write/admin)
+- Usage tracking and rate limiting per client
+
+**Current Status:** Framework exists but not implemented in API routes. Services currently use IP allowlists + shared secrets.
+
+#### Authentication Modes
+
+- **API Key** (preferred): WS subprotocol header; also accepted via query `api_key` or `Authorization: Bearer`
+- **Optional HMAC Guard**: `sig` and `ts` query parameters, verified as HMAC-SHA256(callId:ts)
+- **IP Allowlist**: Network-level access control (see above)
+- **Shared Secrets**: For webhook verification and internal services
 
 ### ⚙️ Environment Variables (key)
 

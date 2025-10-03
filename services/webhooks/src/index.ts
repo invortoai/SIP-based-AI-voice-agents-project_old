@@ -108,17 +108,45 @@ let redis!: RedisType;
 
 // Initialize external deps when server is ready
 app.addHook("onReady", async () => {
+  // Get Redis URL from secret or environment
+  let redisUrlSource = "default";
   try {
     const fromSecret = await getSecret("REDIS_URL");
-    redisUrl = fromSecret || process.env.REDIS_URL || "redis://localhost:6379";
-  } catch {
+    if (fromSecret) {
+      redisUrl = fromSecret;
+      redisUrlSource = "secret";
+    } else if (process.env.REDIS_URL) {
+      redisUrl = process.env.REDIS_URL;
+      redisUrlSource = "environment";
+    } else {
+      redisUrl = "redis://localhost:6379";
+      redisUrlSource = "default";
+    }
+  } catch (err) {
+    app.log.warn({ err }, "Failed to get Redis URL from secret, trying environment");
     redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
+    redisUrlSource = process.env.REDIS_URL ? "environment" : "default";
   }
+
+  app.log.info({ redisUrl, source: redisUrlSource }, "Initializing Redis connection");
+
+  // Initialize Redis connection
   try {
     redis = new (Redis as any)(redisUrl);
+
+    // Test the connection with timeout
+    await Promise.race([
+      redis.ping(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Redis ping timeout")), 5000)
+      )
+    ]);
+
+    app.log.info("Redis connection established successfully");
   } catch (err) {
-    app.log.error({ err }, "redis init failed");
-    throw new Error("Failed to initialize Redis connection");
+    app.log.error({ err, redisUrl }, "Redis connection failed - service will start with degraded functionality");
+    // Don't throw - allow service to start with degraded Redis functionality
+    redis = undefined as any;
   }
 });
 
@@ -221,13 +249,23 @@ function calculateRetryDelay(attempt: number, baseDelay: number): number {
   return Math.min(delay, 300000); // Max 5 minutes
 }
 
-// Rate limiting
+// Rate limiting with size limits to prevent memory leaks
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+const MAX_RATE_LIMIT_ENTRIES = 10000; // Limit map size
 
 function checkRateLimit(url: string): boolean {
   const now = Date.now();
   const windowStart = now - 60000; // 1 minute window
   const key = `${url}:${Math.floor(now / 60000)}`; // Per-minute key
+
+  // Clean up old entries periodically to prevent memory leaks
+  if (rateLimitMap.size > MAX_RATE_LIMIT_ENTRIES) {
+    for (const [k, v] of rateLimitMap.entries()) {
+      if (now > v.resetTime) {
+        rateLimitMap.delete(k);
+      }
+    }
+  }
 
   const limit = rateLimitMap.get(key) || { count: 0, resetTime: windowStart + 60000 };
 
@@ -276,8 +314,10 @@ function transformWebhookPayload(payload: any, transformation?: any): any {
   return transformed;
 }
 
-// Health & Prometheus metrics
-app.get("/health", async () => ({ ok: true, service: "webhooks" }));
+// Health check endpoint for ALB
+app.get("/health", async (req, reply) => {
+  return reply.code(200).send({ ok: true, service: "webhooks" });
+});
 
 const registry = new client.Registry();
 client.collectDefaultMetrics({ register: registry });
@@ -346,7 +386,12 @@ app.post("/dispatch", async (req, reply) => {
 
     // Use priority queue if priority > 1
     const queueName = priority > 1 ? `webhooks:priority:${priority}` : "webhooks:queue";
-    await redis.lpush(queueName, JSON.stringify(job));
+    if (redis) {
+      await redis.lpush(queueName, JSON.stringify(job));
+    } else {
+      structuredLogger.warn("Redis not available, webhook not queued", { jobId: job.id });
+      return reply.code(503).send({ code: "service_unavailable", message: "Redis not available" });
+    }
 
     try { webhookCounters.inc({ event: "queued" }); } catch {}
     structuredLogger.info("Webhook queued", { jobId: job.id, url, priority });
@@ -399,12 +444,15 @@ app.post("/dispatch/batch", async (req, reply) => {
     jobs.push(job);
   }
   
-  if (jobs.length > 0) {
+  if (jobs.length > 0 && redis) {
     const pipeline = redis.pipeline();
     for (const job of jobs) {
       pipeline.lpush("webhooks:queue", JSON.stringify(job));
     }
     await pipeline.exec();
+  } else if (jobs.length > 0 && !redis) {
+    structuredLogger.warn("Redis not available, batch webhooks not queued");
+    return reply.code(503).send({ code: "service_unavailable", message: "Redis not available" });
   }
   
   app.log.info({ count: jobs.length }, "Batch webhooks queued");
@@ -432,11 +480,15 @@ app.post("/verify", async (req, reply) => {
 });
 
 // Get DLQ stats
-app.get("/dlq/stats", async () => {
+app.get("/dlq/stats", async (req, reply) => {
+  if (!redis) {
+    return reply.code(503).send({ code: "service_unavailable", message: "Redis not available" });
+  }
+
   const dlqLength = await redis.llen("webhooks:dlq");
   const retryQueueLength = await redis.llen("webhooks:retry");
   const mainQueueLength = await redis.llen("webhooks:queue");
-  
+
   return {
     dlq: dlqLength,
     retry: retryQueueLength,
@@ -446,10 +498,14 @@ app.get("/dlq/stats", async () => {
 });
 
 // Get DLQ items
-app.get("/dlq/items", async (req) => {
+app.get("/dlq/items", async (req, reply) => {
+  if (!redis) {
+    return reply.code(503).send({ code: "service_unavailable", message: "Redis not available" });
+  }
+
   const limit = parseInt((req.query as any).limit || "10");
   const items = await redis.lrange("webhooks:dlq", 0, limit - 1);
-  
+
   return {
     items: items.map(item => {
       try {
@@ -464,12 +520,16 @@ app.get("/dlq/items", async (req) => {
 
 // Retry DLQ item
 app.post("/dlq/retry/:id", async (req, reply) => {
+  if (!redis) {
+    return reply.code(503).send({ code: "service_unavailable", message: "Redis not available" });
+  }
+
   const { id } = req.params as any;
-  
+
   // Find and remove from DLQ
   const items = await redis.lrange("webhooks:dlq", 0, -1);
   let found: WebhookJob | null = null;
-  
+
   for (const item of items) {
     try {
       const job = JSON.parse(item);
@@ -480,34 +540,45 @@ app.post("/dlq/retry/:id", async (req, reply) => {
       }
     } catch {}
   }
-  
+
   if (!found) {
     return reply.code(404).send({ code: "not_found" });
   }
-  
+
   // Reset attempts and requeue
   found.attempts = 0;
   delete found.lastError;
   await redis.lpush("webhooks:queue", JSON.stringify(found));
-  
+
   return { ok: true, requeued: true, jobId: found.id };
 });
 
 // Clear DLQ
-app.delete("/dlq/clear", async () => {
+app.delete("/dlq/clear", async (req, reply) => {
+  if (!redis) {
+    return reply.code(503).send({ code: "service_unavailable", message: "Redis not available" });
+  }
+
   const count = await redis.llen("webhooks:dlq");
   await redis.del("webhooks:dlq");
-  
+
   return { ok: true, cleared: count };
 });
 
 // Webhook worker process
 async function webhookWorker() {
   structuredLogger.info("Webhook worker started");
-  
+
   while (true) {
     const workerSpan = createSpan("webhook_worker_cycle");
     try {
+      // Check if Redis is available
+      if (!redis) {
+        structuredLogger.warn("Redis not available, skipping webhook processing");
+        await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+        continue;
+      }
+
       // Check retry queue first
       const now = Date.now();
       const retryItems = await redis.zrangebyscore("webhooks:retry", "-inf", now, "LIMIT", 0, 10);
@@ -529,7 +600,10 @@ async function webhookWorker() {
       // If no priority jobs, process main queue
       if (!result) {
         result = await redis.brpop("webhooks:queue", 5);
-        if (!result) continue;
+        if (!result) {
+          workerSpan.end();
+          continue;
+        }
       }
 
       const [, rawJob] = result;
@@ -588,7 +662,7 @@ async function webhookWorker() {
         customMetrics.recordHistogram("webhook_delivery_time_ms", Date.now() - parseInt(job.createdAt || "0"));
 
         // Store success metrics
-        await redis.hincrby("webhooks:metrics:success", new Date().toISOString().split("T")[0], 1);
+        if (redis) await redis.hincrby("webhooks:metrics:success", new Date().toISOString().split("T")[0], 1);
 
       } catch (err: any) {
         // Record failure for circuit breaker
@@ -606,7 +680,7 @@ async function webhookWorker() {
         });
         try { webhookCounters.inc({ event: "failed" }); } catch {}
 
-        if (job.attempts < MAX_RETRIES) {
+        if (job.attempts < MAX_RETRIES && redis) {
           // Schedule retry with advanced backoff (including jitter)
           const baseDelay = RETRY_DELAYS[job.attempts - 1] || RETRY_DELAYS[RETRY_DELAYS.length - 1];
           const delay = calculateRetryDelay(job.attempts, baseDelay);
@@ -623,9 +697,11 @@ async function webhookWorker() {
           }, "Webhook scheduled for retry");
 
         } else {
-          // Move to DLQ
-          await (redis as any).lpush("webhooks:dlq", JSON.stringify(job));
-          await redis.expire(`webhooks:dlq`, DLQ_TTL);
+          // Move to DLQ (only if Redis is available)
+          if (redis) {
+            await (redis as any).lpush("webhooks:dlq", JSON.stringify(job));
+            await redis.expire(`webhooks:dlq`, DLQ_TTL);
+          }
 
           app.log.error({
             jobId: job.id,
@@ -634,11 +710,11 @@ async function webhookWorker() {
           }, "Webhook moved to DLQ after max retries");
 
           // Store failure metrics
-          await redis.hincrby("webhooks:metrics:dlq", new Date().toISOString().split("T")[0], 1);
+          if (redis) await redis.hincrby("webhooks:metrics:dlq", new Date().toISOString().split("T")[0], 1);
         }
 
         // Store retry metrics
-        await redis.hincrby("webhooks:metrics:retries", new Date().toISOString().split("T")[0], 1);
+        if (redis) await redis.hincrby("webhooks:metrics:retries", new Date().toISOString().split("T")[0], 1);
       }
       
     } catch (err) {
@@ -661,20 +737,24 @@ if (!process.env.JEST_WORKER_ID && (process.env.NODE_ENV || "") !== "test") {
 }
 
 // Metrics endpoint
-app.get("/metrics/summary", async () => {
+app.get("/metrics/summary", async (req, reply) => {
+  if (!redis) {
+    return reply.code(503).send({ code: "service_unavailable", message: "Redis not available" });
+  }
+
   const [success, retries, dlqMetrics] = await Promise.all([
     redis.hgetall("webhooks:metrics:success"),
     redis.hgetall("webhooks:metrics:retries"),
     redis.hgetall("webhooks:metrics:dlq"),
   ]);
-  
+
   const queueStats = await redis.eval(`
     local main = redis.call('llen', 'webhooks:queue')
     local retry = redis.call('llen', 'webhooks:retry')
     local dlq = redis.call('llen', 'webhooks:dlq')
     return {main, retry, dlq}
   `, 0) as number[];
-  
+
   return {
     success,
     retries,

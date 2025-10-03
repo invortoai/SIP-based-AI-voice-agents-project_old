@@ -672,3 +672,25 @@ variable "redis_password" {
   type        = string
   sensitive   = true
 }
+
+
+# Externalized endpoints and bucket names to avoid managing pre-existing infra
+variable "redis_endpoint" {
+  description = "Externally managed Redis endpoint host:port (e.g. master.production-invorto-redis.p7a5gs.aps1.cache.amazonaws.com:6379)"
+  type        = string
+}
+
+variable "s3_bucket_transcripts" {
+  description = "S3 bucket name for transcripts (e.g. invorto-production-transcripts)"
+  type        = string
+}
+
+variable "s3_bucket_recordings" {
+  description = "S3 bucket name for recordings (e.g. invorto-production-recordings)"
+  type        = string
+}
+
+variable "s3_bucket_documents" {
+  description = "S3 bucket name for documents (currently using metrics bucket e.g. invorto-production-metrics)"
+  type        = string
+}

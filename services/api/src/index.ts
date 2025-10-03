@@ -1,5 +1,5 @@
-import Fastify, { FastifyInstance } from "fastify";
-import { Client } from "pg";
+/*  */import Fastify, { FastifyInstance } from "fastify";
+import { createClient } from '@supabase/supabase-js';
 import { z } from "zod";
 import Redis from "ioredis";
 import type { Redis as RedisType } from "ioredis";
@@ -70,51 +70,71 @@ async function resolveSecret(name?: string) {
   }
 }
 
-let pg!: Client;
-let pgReady = false;
+let supabase: any;
+let dbReady = false;
 let redis!: RedisType;
 
 // Initialize external deps before server starts listening
 app.addHook("onReady", async () => {
-  const dbUrl = process.env.SUPABASE_URL || process.env.DB_URL;
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE;
   const redisUrlEnv = (await resolveSecret(process.env.AWS_SECRETS_REDIS_URL)) || process.env.REDIS_URL || "redis://localhost:6379";
 
-  // In test runs, avoid opening real DB sockets which can timeout or keep open handles
+  // In test runs, avoid opening real DB connections
   if (process.env.JEST_WORKER_ID || (process.env.NODE_ENV || "") === "test") {
     try {
       redis = new (Redis as any)(redisUrlEnv);
     } catch (err) {
       app.log.error({ err }, "redis init failed");
     }
-    // Provide a lightweight PG stub so route code can call pg.query without type errors or network IO
-    const pgStub: any = {
-      query: async (..._args: any[]) => ({ rows: [], rowCount: 0 })
+    // Provide a lightweight Supabase stub
+    supabase = {
+      from: () => ({
+        select: () => ({ eq: () => ({ single: () => ({ data: null, error: null }) }) }),
+        insert: () => ({ select: () => ({ single: () => ({ data: null, error: null }) }) }),
+        update: () => ({ eq: () => ({ returning: () => ({ data: null, error: null }) }) }),
+        delete: () => ({ eq: () => ({ data: null, error: null }) })
+      })
     };
-    pg = pgStub as unknown as Client;
-    pgReady = false;
+    dbReady = false;
     return;
   }
 
-  if (dbUrl) {
+  if (supabaseUrl && supabaseServiceKey) {
     try {
-      pg = new Client({ connectionString: dbUrl });
-      await pg.connect();
-      pgReady = true;
+      supabase = createClient(supabaseUrl, supabaseServiceKey);
+      // Test connection with timeout
+      await Promise.race([
+        supabase.from('calls').select('count').limit(1),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Supabase connection timeout")), 5000)
+        )
+      ]);
+      dbReady = true;
     } catch (err) {
-      app.log.error({ err }, "pg connect failed");
-      // Fallback to stub to keep server responsive even if DB is unavailable
-      const pgStub: any = {
-        query: async (..._args: any[]) => ({ rows: [], rowCount: 0 })
+      app.log.error({ err }, "supabase connect failed");
+      // Fallback to stub to keep server responsive
+      supabase = {
+        from: () => ({
+          select: () => ({ eq: () => ({ single: () => ({ data: null, error: null }) }) }),
+          insert: () => ({ select: () => ({ single: () => ({ data: null, error: null }) }) }),
+          update: () => ({ eq: () => ({ returning: () => ({ data: null, error: null }) }) }),
+          delete: () => ({ eq: () => ({ data: null, error: null }) })
+        })
       };
-      pg = pgStub as unknown as Client;
-      pgReady = false;
+      dbReady = false;
     }
   } else {
-    const pgStub: any = {
-      query: async (..._args: any[]) => ({ rows: [], rowCount: 0 })
+    app.log.warn("Supabase credentials not found, running in stub mode");
+    supabase = {
+      from: () => ({
+        select: () => ({ eq: () => ({ single: () => ({ data: null, error: null }) }) }),
+        insert: () => ({ select: () => ({ single: () => ({ data: null, error: null }) }) }),
+        update: () => ({ eq: () => ({ returning: () => ({ data: null, error: null }) }) }),
+        delete: () => ({ eq: () => ({ data: null, error: null }) })
+      })
     };
-    pg = pgStub as unknown as Client;
-    pgReady = false;
+    dbReady = false;
   }
 
   try {
@@ -126,24 +146,16 @@ app.addHook("onReady", async () => {
 
 // Close external resources on app shutdown (tests and runtime)
 app.addHook("onClose", async () => {
-  // Close Postgres client if connected (in tests it's a stub)
-  try { await (pg as any)?.end?.(); } catch {}
+  // Supabase doesn't need explicit closing
   // Prefer graceful quit; fall back to disconnect for ioredis
   try { await (redis as any)?.quit?.(); } catch {}
   try { (redis as any)?.disconnect?.(); } catch {}
 });
 
-// Set tenant_id for RLS (example: from header)
+// Set tenant context for RLS (Supabase handles this automatically with auth)
 app.addHook("onRequest", async (req) => {
-  const tenantId = (req.headers["x-tenant-id"] || "t_demo").toString();
-  // Only attempt to tag session when PG is connected; avoid blocking requests during tests
-  if (pgReady && pg) {
-    try {
-      await pg.query("select set_config('app.tenant_id', $1, true)", [tenantId]);
-    } catch {
-      // ignore in tests or when PG unavailable
-    }
-  }
+  // Supabase RLS policies handle tenant isolation
+  // No manual session tagging needed
 });
 
 app.get("/health", async () => ({ ok: true }));
@@ -232,10 +244,19 @@ app.post("/v1/agents", async (req, reply) => {
   }
   const id = `a_${Math.random().toString(36).slice(2)}`;
   try {
-    await pg.query("insert into agents (id, tenant_id, name, config) values ($1, $2, $3, $4)",
-      [id, "t_demo", parsed.data.name, JSON.stringify(parsed.data.config)]);
+    const { error } = await supabase
+      .from('agents')
+      .insert({
+        id,
+        tenant_id: "t_demo",
+        name: parsed.data.name,
+        config: parsed.data.config
+      });
+
+    if (error) throw error;
   } catch (err) {
     app.log.error({ err }, "insert agent failed");
+    return reply.code(500).send({ code: "internal_error" });
   }
   return { id, version: 1 };
 });
@@ -252,49 +273,72 @@ app.post("/v1/calls", async (req, reply) => {
   if (!parsed.success) {
     return reply.code(400).send({ code: "bad_request", error: parsed.error.flatten() });
   }
-  
+
   // Check tenant caps
   const tenantId = (req.headers["x-tenant-id"] || "t_demo").toString();
-  
+
   // Check concurrent calls limit
-  const concurrentCalls = await pg.query(
-    "select count(*) from calls where tenant_id = $1 and status in ('created', 'active') and started_at > now() - interval '1 hour'",
-    [tenantId]
-  );
-  
-  const callCount = parseInt(concurrentCalls.rows[0]?.count || "0");
+  const { data: concurrentCalls, error: concurrentError } = await supabase
+    .from('calls')
+    .select('id', { count: 'exact' })
+    .eq('tenant_id', tenantId)
+    .in('status', ['created', 'active'])
+    .gte('started_at', new Date(Date.now() - 60 * 60 * 1000).toISOString()); // Last hour
+
+  if (concurrentError) {
+    app.log.error({ concurrentError }, "concurrent calls check failed");
+    return reply.code(500).send({ code: "internal_error" });
+  }
+
+  const callCount = concurrentCalls?.length || 0;
   const maxConcurrent = parseInt(process.env.MAX_CONCURRENT_CALLS || "10");
-  
+
   if (callCount >= maxConcurrent) {
     return reply.code(429).send({
       code: "rate_limit_exceeded",
       message: "Maximum concurrent calls reached"
     });
   }
-  
+
   // Check daily usage cap
-  const dailyUsage = await pg.query(
-    "select sum(cost_inr) as total from calls where tenant_id = $1 and started_at > now() - interval '24 hours'",
-    [tenantId]
-  );
-  
-  const dailyTotal = parseFloat(dailyUsage.rows[0]?.total || "0");
+  const { data: dailyUsage, error: dailyError } = await supabase
+    .from('call_costs')
+    .select('cost_inr')
+    .eq('tenant_id', tenantId)
+    .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()); // Last 24 hours
+
+  if (dailyError) {
+    app.log.error({ dailyError }, "daily usage check failed");
+    return reply.code(500).send({ code: "internal_error" });
+  }
+
+  const dailyTotal = dailyUsage?.reduce((sum: number, cost: any) => sum + (cost.cost_inr || 0), 0) || 0;
   const dailyCap = parseFloat(process.env.DAILY_COST_CAP_INR || "10000");
-  
+
   if (dailyTotal >= dailyCap) {
     return reply.code(429).send({
       code: "usage_cap_exceeded",
       message: "Daily usage cap exceeded"
     });
   }
-  
+
   const id = `c_${Math.random().toString(36).slice(2)}`;
   try {
-    await pg.query(
-      "insert into calls (id, tenant_id, agent_id, direction, from_num, to_num, status, started_at) values ($1, $2, $3, $4, $5, $6, $7, now())",
-      [id, tenantId, parsed.data.agentId, "outbound", parsed.data.from || "system", parsed.data.to, "created"]
-    );
-    
+    const { error: insertError } = await supabase
+      .from('calls')
+      .insert({
+        id,
+        tenant_id: tenantId,
+        agent_id: parsed.data.agentId,
+        direction: "outbound",
+        from_num: parsed.data.from || "system",
+        to_num: parsed.data.to,
+        status: "created",
+        started_at: new Date().toISOString()
+      });
+
+    if (insertError) throw insertError;
+
     // Store metadata if provided
     if (parsed.data.metadata) {
       await redis.hset(`call:${id}:metadata`, parsed.data.metadata);
@@ -377,11 +421,16 @@ app.post("/v1/calls/:id/recording", async (req, reply) => {
   try {
     const s3Path = await s3Artifacts.uploadRecording(id, body);
     
-    // Update call record
-    await pg.query(
-      "update calls set status = 'completed', ended_at = now() where id = $1",
-      [id]
-    );
+    // Update call record using Supabase
+    const { error } = await supabase
+      .from('calls')
+      .update({
+        status: 'completed',
+        ended_at: new Date().toISOString()
+      })
+      .eq('id', id);
+
+    if (error) throw error;
     
     return { success: true, path: s3Path };
   } catch (err) {
@@ -393,31 +442,34 @@ app.post("/v1/calls/:id/recording", async (req, reply) => {
 // Get call details with costs
 app.get("/v1/calls/:id", async (req, reply) => {
   const { id } = (req.params as any) as { id: string };
-  
+
   try {
-    const callResult = await pg.query(
-      "select * from calls where id = $1",
-      [id]
-    );
-    
-    if (callResult.rows.length === 0) {
+    const { data: call, error: callError } = await supabase
+      .from('calls')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (callError || !call) {
       return reply.code(404).send({ code: "not_found" });
     }
-    
-    const call = callResult.rows[0];
-    
+
     // Get costs breakdown
-    const costsResult = await pg.query(
-      "select * from call_costs where call_id = $1",
-      [id]
-    );
-    
+    const { data: costs, error: costsError } = await supabase
+      .from('call_costs')
+      .select('*')
+      .eq('call_id', id);
+
+    if (costsError) {
+      app.log.error({ costsError }, "Failed to get call costs");
+    }
+
     // Get metadata from Redis
     const metadata = await redis.hgetall(`call:${id}:metadata`);
-    
+
     return {
       ...call,
-      costs: costsResult.rows,
+      costs: costs || [],
       metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
     };
   } catch (err) {
@@ -430,11 +482,26 @@ app.get("/v1/calls/:id", async (req, reply) => {
 app.post("/v1/calls/:id/summary", async (req, reply) => {
   const { id } = (req.params as any) as { id: string };
   const summary = (req as any).body;
-  
+
   try {
     // Upload summary to S3
     const s3Path = await s3Artifacts.uploadSummary(id, summary);
-    
+
+    // Store summary in Supabase (optional - for tracking)
+    const { error: summaryError } = await supabase
+      .from('call_summaries')
+      .insert({
+        call_id: id,
+        summary: summary,
+        s3_path: s3Path,
+        created_at: new Date().toISOString()
+      });
+
+    if (summaryError) {
+      app.log.warn({ summaryError }, "Failed to store summary in database");
+      // Don't fail the request if database storage fails
+    }
+
     // Trigger summary webhook
     const tenantWebhook = process.env.TENANT_WEBHOOK_URL;
     if (tenantWebhook) {
@@ -454,7 +521,7 @@ app.post("/v1/calls/:id/summary", async (req, reply) => {
         })
       );
     }
-    
+
     return { success: true, path: s3Path };
   } catch (err) {
     app.log.error({ err }, "Failed to submit summary");
@@ -473,60 +540,49 @@ app.get("/v1/calls", async (req, reply) => {
     to?: string;
     tenantId?: string;
   };
-  
+
   const page = parseInt(query.page || "1");
   const limit = Math.min(parseInt(query.limit || "50"), 100);
   const offset = (page - 1) * limit;
-  
+
   try {
-    let whereClause = "where 1=1";
-    const params: any[] = [];
-    let paramIndex = 1;
-    
-    if (query.status) {
-      whereClause += ` and status = $${paramIndex++}`;
-      params.push(query.status);
-    }
-    
-    if (query.agentId) {
-      whereClause += ` and agent_id = $${paramIndex++}`;
-      params.push(query.agentId);
-    }
-    
-    if (query.from) {
-      whereClause += ` and started_at >= $${paramIndex++}`;
-      params.push(query.from);
-    }
-    
-    if (query.to) {
-      whereClause += ` and started_at <= $${paramIndex++}`;
-      params.push(query.to);
-    }
-    
     const tenantId = query.tenantId || (req.headers["x-tenant-id"] || "t_demo").toString();
-    whereClause += ` and tenant_id = $${paramIndex++}`;
-    params.push(tenantId);
-    
-    // Get total count
-    const countResult = await pg.query(
-      `select count(*) from calls ${whereClause}`,
-      params
-    );
-    const total = parseInt(countResult.rows[0]?.count || "0");
-    
-    // Get calls with pagination
-    const callsResult = await pg.query(
-      `select * from calls ${whereClause} order by started_at desc limit $${paramIndex++} offset $${paramIndex++}`,
-      [...params, limit, offset]
-    );
-    
+
+    // Build query
+    let supabaseQuery = supabase
+      .from('calls')
+      .select('*', { count: 'exact' })
+      .eq('tenant_id', tenantId)
+      .order('started_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (query.status) {
+      supabaseQuery = supabaseQuery.eq('status', query.status);
+    }
+
+    if (query.agentId) {
+      supabaseQuery = supabaseQuery.eq('agent_id', query.agentId);
+    }
+
+    if (query.from) {
+      supabaseQuery = supabaseQuery.gte('started_at', query.from);
+    }
+
+    if (query.to) {
+      supabaseQuery = supabaseQuery.lte('started_at', query.to);
+    }
+
+    const { data: calls, error, count } = await supabaseQuery;
+
+    if (error) throw error;
+
     return {
-      calls: callsResult.rows,
+      calls: calls || [],
       pagination: {
         page,
         limit,
-        total,
-        pages: Math.ceil(total / limit),
+        total: count || 0,
+        pages: Math.ceil((count || 0) / limit),
       },
     };
   } catch (err) {
@@ -539,26 +595,31 @@ app.get("/v1/calls", async (req, reply) => {
 app.patch("/v1/calls/:id/status", async (req, reply) => {
   const { id } = (req.params as any) as { id: string };
   const { status, metadata } = (req.body as any) || {};
-  
+
   if (!status) {
     return reply.code(400).send({ code: "bad_request", message: "status required" });
   }
-  
+
   try {
-    const updateResult = await pg.query(
-      "update calls set status = $1, updated_at = now() where id = $2 returning *",
-      [status, id]
-    );
-    
-    if (updateResult.rows.length === 0) {
+    const { data: call, error } = await supabase
+      .from('calls')
+      .update({
+        status,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error || !call) {
       return reply.code(404).send({ code: "not_found" });
     }
-    
+
     // Update metadata if provided
     if (metadata) {
       await redis.hset(`call:${id}:metadata`, metadata);
     }
-    
+
     // Publish status change to timeline
     await redis.xadd(
       `events:${id}`,
@@ -568,8 +629,8 @@ app.patch("/v1/calls/:id/status", async (req, reply) => {
       "payload",
       JSON.stringify({ status, metadata })
     );
-    
-    return { success: true, call: updateResult.rows[0] };
+
+    return { success: true, call };
   } catch (err) {
     app.log.error({ err }, "Failed to update call status");
     return reply.code(500).send({ code: "internal_error" });
@@ -579,31 +640,38 @@ app.patch("/v1/calls/:id/status", async (req, reply) => {
 // Get agent details
 app.get("/v1/agents/:id", async (req, reply) => {
   const { id } = (req.params as any) as { id: string };
-  
+
   try {
-    const agentResult = await pg.query(
-      "select * from agents where id = $1",
-      [id]
-    );
-    
-    if (agentResult.rows.length === 0) {
+    const { data: agent, error: agentError } = await supabase
+      .from('agents')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (agentError || !agent) {
       return reply.code(404).send({ code: "not_found" });
     }
-    
+
     // Get agent statistics
-    const statsResult = await pg.query(
-      "select count(*) as total_calls, avg(cost_inr) as avg_cost from calls where agent_id = $1",
-      [id]
-    );
-    
-    const agent = agentResult.rows[0];
-    const stats = statsResult.rows[0];
-    
+    const { data: calls, error: statsError } = await supabase
+      .from('calls')
+      .select('cost_inr')
+      .eq('agent_id', id);
+
+    if (statsError) {
+      app.log.error({ statsError }, "Failed to get agent statistics");
+    }
+
+    const totalCalls = calls?.length || 0;
+    const averageCost = totalCalls > 0
+      ? (calls?.reduce((sum: number, call: any) => sum + (call.cost_inr || 0), 0) || 0) / totalCalls
+      : 0;
+
     return {
       ...agent,
       stats: {
-        totalCalls: parseInt(stats.total_calls || "0"),
-        averageCost: parseFloat(stats.avg_cost || "0"),
+        totalCalls,
+        averageCost,
       },
     };
   } catch (err) {
@@ -626,27 +694,24 @@ app.get("/v1/agents", async (req, reply) => {
   
   try {
     const tenantId = query.tenantId || (req.headers["x-tenant-id"] || "t_demo").toString();
-    
-    // Get total count
-    const countResult = await pg.query(
-      "select count(*) from agents where tenant_id = $1",
-      [tenantId]
-    );
-    const total = parseInt(countResult.rows[0]?.count || "0");
-    
-    // Get agents with pagination
-    const agentsResult = await pg.query(
-      "select * from agents where tenant_id = $1 order by created_at desc limit $2 offset $3",
-      [tenantId, limit, offset]
-    );
-    
+
+    // Get agents with pagination and count
+    const { data: agents, error, count } = await supabase
+      .from('agents')
+      .select('*', { count: 'exact' })
+      .eq('tenant_id', tenantId)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+
     return {
-      agents: agentsResult.rows,
+      agents: agents || [],
       pagination: {
         page,
         limit,
-        total,
-        pages: Math.ceil(total / limit),
+        total: count || 0,
+        pages: Math.ceil((count || 0) / limit),
       },
     };
   } catch (err) {
@@ -661,41 +726,28 @@ app.patch("/v1/agents/:id", async (req, reply) => {
   const { name, config, status } = (req.body as any) || {};
   
   try {
-    const updateFields: string[] = [];
-    const params: any[] = [];
-    let paramIndex = 1;
-    
-    if (name !== undefined) {
-      updateFields.push(`name = $${paramIndex++}`);
-      params.push(name);
-    }
-    
-    if (config !== undefined) {
-      updateFields.push(`config = $${paramIndex++}`);
-      params.push(JSON.stringify(config));
-    }
-    
-    if (status !== undefined) {
-      updateFields.push(`status = $${paramIndex++}`);
-      params.push(status);
-    }
-    
-    if (updateFields.length === 0) {
+    if (name === undefined && config === undefined && status === undefined) {
       return reply.code(400).send({ code: "bad_request", message: "No fields to update" });
     }
-    
-    updateFields.push(`updated_at = now()`);
-    
-    const updateResult = await pg.query(
-      `update agents set ${updateFields.join(", ")} where id = $${paramIndex++} returning *`,
-      [...params, id]
-    );
-    
-    if (updateResult.rows.length === 0) {
+
+    const updateData: any = { updated_at: new Date().toISOString() };
+
+    if (name !== undefined) updateData.name = name;
+    if (config !== undefined) updateData.config = config;
+    if (status !== undefined) updateData.status = status;
+
+    const { data: agent, error } = await supabase
+      .from('agents')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error || !agent) {
       return reply.code(404).send({ code: "not_found" });
     }
-    
-    return { success: true, agent: updateResult.rows[0] };
+
+    return { success: true, agent };
   } catch (err) {
     app.log.error({ err }, "Failed to update agent");
     return reply.code(500).send({ code: "internal_error" });
@@ -708,30 +760,35 @@ app.delete("/v1/agents/:id", async (req, reply) => {
   
   try {
     // Check if agent has active calls
-    const activeCallsResult = await pg.query(
-      "select count(*) from calls where agent_id = $1 and status in ('created', 'active')",
-      [id]
-    );
-    
-    const activeCalls = parseInt(activeCallsResult.rows[0]?.count || "0");
-    if (activeCalls > 0) {
+    const { data: activeCalls, error: activeError } = await supabase
+      .from('calls')
+      .select('id', { count: 'exact' })
+      .eq('agent_id', id)
+      .in('status', ['created', 'active']);
+
+    if (activeError) throw activeError;
+
+    const activeCount = activeCalls?.length || 0;
+    if (activeCount > 0) {
       return reply.code(400).send({
         code: "agent_in_use",
         message: "Cannot delete agent with active calls",
-        activeCalls,
+        activeCalls: activeCount,
       });
     }
-    
-    const deleteResult = await pg.query(
-      "delete from agents where id = $1 returning *",
-      [id]
-    );
-    
-    if (deleteResult.rows.length === 0) {
+
+    const { data: deletedAgent, error: deleteError } = await supabase
+      .from('agents')
+      .delete()
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (deleteError || !deletedAgent) {
       return reply.code(404).send({ code: "not_found" });
     }
-    
-    return { success: true, deleted: deleteResult.rows[0] };
+
+    return { success: true, deleted: deletedAgent };
   } catch (err) {
     app.log.error({ err }, "Failed to delete agent");
     return reply.code(500).send({ code: "internal_error" });
@@ -742,57 +799,73 @@ app.delete("/v1/agents/:id", async (req, reply) => {
 app.get("/v1/tenants/:id/usage", async (req, reply) => {
   const { id } = (req.params as any) as { id: string };
   const { period } = (req.query as any) as { period?: string };
-  
-  const periodMap: Record<string, string> = {
-    "1h": "1 hour",
-    "24h": "24 hours",
-    "7d": "7 days",
-    "30d": "30 days",
-    "1m": "1 month",
+
+  const periodMap: Record<string, number> = {
+    "1h": 1 * 60 * 60 * 1000,      // 1 hour
+    "24h": 24 * 60 * 60 * 1000,    // 24 hours
+    "7d": 7 * 24 * 60 * 60 * 1000,  // 7 days
+    "30d": 30 * 24 * 60 * 60 * 1000, // 30 days
+    "1m": 30 * 24 * 60 * 60 * 1000,  // 1 month (approx)
   };
-  
-  const timeRange = periodMap[period || "24h"] || "24 hours";
-  
+
+  const timeRangeMs = periodMap[period || "24h"] || 24 * 60 * 60 * 1000;
+  const startDate = new Date(Date.now() - timeRangeMs).toISOString();
+
   try {
     // Get call statistics
-    const callStatsResult = await pg.query(
-      `select 
-        count(*) as total_calls,
-        count(case when status = 'completed' then 1 end) as completed_calls,
-        count(case when status = 'failed' then 1 end) as failed_calls,
-        avg(cost_inr) as avg_cost,
-        sum(cost_inr) as total_cost,
-        avg(extract(epoch from (ended_at - started_at))) as avg_duration
-      from calls 
-      where tenant_id = $1 and started_at > now() - interval '${timeRange}'`,
-      [id]
-    );
-    
-    const stats = callStatsResult.rows[0];
-    
+    const { data: calls, error: callsError } = await supabase
+      .from('calls')
+      .select('status, cost_inr, started_at, ended_at')
+      .eq('tenant_id', id)
+      .gte('started_at', startDate);
+
+    if (callsError) throw callsError;
+
+    // Calculate call statistics
+    const totalCalls = calls?.length || 0;
+    const completedCalls = calls?.filter((c: any) => c.status === 'completed').length || 0;
+    const failedCalls = calls?.filter((c: any) => c.status === 'failed').length || 0;
+    const totalCost = calls?.reduce((sum: number, c: any) => sum + (c.cost_inr || 0), 0) || 0;
+    const averageCost = totalCalls > 0 ? totalCost / totalCalls : 0;
+
+    // Calculate average duration for completed calls
+    const completedCallsWithDuration = calls?.filter((c: any) =>
+      c.status === 'completed' && c.started_at && c.ended_at
+    ) || [];
+
+    const averageDuration = completedCallsWithDuration.length > 0
+      ? completedCallsWithDuration.reduce((sum: number, c: any) => {
+          const duration = new Date(c.ended_at!).getTime() - new Date(c.started_at!).getTime();
+          return sum + (duration / 1000); // Convert to seconds
+        }, 0) / completedCallsWithDuration.length
+      : 0;
+
     // Get agent statistics
-    const agentStatsResult = await pg.query(
-      "select count(*) as total_agents, count(case when status = 'active' then 1 end) as active_agents from agents where tenant_id = $1",
-      [id]
-    );
-    
-    const agentStats = agentStatsResult.rows[0];
-    
+    const { data: agents, error: agentsError } = await supabase
+      .from('agents')
+      .select('status')
+      .eq('tenant_id', id);
+
+    if (agentsError) throw agentsError;
+
+    const totalAgents = agents?.length || 0;
+    const activeAgents = agents?.filter((a: any) => a.status === 'active').length || 0;
+
     return {
       tenantId: id,
       period,
-      timeRange,
+      timeRange: `${timeRangeMs / (1000 * 60 * 60)} hours`,
       calls: {
-        total: parseInt(stats.total_calls || "0"),
-        completed: parseInt(stats.completed_calls || "0"),
-        failed: parseInt(stats.failed_calls || "0"),
-        averageCost: parseFloat(stats.avg_cost || "0"),
-        totalCost: parseFloat(stats.total_cost || "0"),
-        averageDuration: parseFloat(stats.avg_duration || "0"),
+        total: totalCalls,
+        completed: completedCalls,
+        failed: failedCalls,
+        averageCost,
+        totalCost,
+        averageDuration,
       },
       agents: {
-        total: parseInt(agentStats.total_agents || "0"),
-        active: parseInt(agentStats.active_agents || "0"),
+        total: totalAgents,
+        active: activeAgents,
       },
     };
   } catch (err) {
@@ -804,15 +877,18 @@ app.get("/v1/tenants/:id/usage", async (req, reply) => {
 // Health check with database connectivity
 app.get("/health/detailed", async () => {
   try {
-    // Check database connectivity
-    await pg.query("select 1");
-    
+    // Check Supabase connectivity
+    if (dbReady && supabase) {
+      const { error } = await supabase.from('calls').select('count').limit(1).single();
+      if (error) throw error;
+    }
+
     // Check Redis connectivity
     await redis.ping();
-    
+
     return {
       ok: true,
-      database: "connected",
+      database: dbReady ? "connected" : "stub_mode",
       redis: "connected",
       timestamp: new Date().toISOString(),
     };

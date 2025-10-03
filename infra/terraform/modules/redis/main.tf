@@ -28,7 +28,7 @@ resource "aws_elasticache_subnet_group" "this" {
 }
 
 resource "aws_elasticache_cluster" "this" {
-  cluster_id           = "${var.environment}-invorto-redis"
+  cluster_id           = "production-invorto-redis"
   engine               = "redis"
   node_type            = var.node_type
   num_cache_nodes      = 1

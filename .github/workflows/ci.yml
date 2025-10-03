@@ -160,7 +160,11 @@ jobs:
             -var="certificate_arn=${{ secrets.CERTIFICATE_ARN }}" \
             -var="github_connection_arn=${{ secrets.GITHUB_CONNECTION_ARN }}" \
             -var="jambonz_key_name=${{ secrets.JAMBONZ_KEY_NAME }}" \
-            -var="enable_cost_alerts=false"
+            -var="enable_cost_alerts=false" \
+            -var="redis_endpoint=master.production-invorto-redis.p7a5gs.aps1.cache.amazonaws.com:6379" \
+            -var="s3_bucket_transcripts=invorto-production-transcripts" \
+            -var="s3_bucket_recordings=invorto-production-recordings" \
+            -var="s3_bucket_documents=invorto-production-metrics"
       - name: Terraform show plan (no secrets)
         working-directory: infra/terraform
         run: terraform show -no-color tfplan > plan.txt
@@ -419,19 +423,27 @@ jobs:
             # Update the image in the task definition
             NEW_TASK_DEF=$(echo "$TASK_DEFINITION" | \
               jq --arg IMAGE "${ECR_REGISTRY}/${ECR_REPOSITORY_PREFIX}-${service}:${{ github.sha }}" \
-                  --arg SERVICE_NAME "$service" '
+                  --arg SERVICE_NAME "$service" \
+                  --arg REDIS_URL "redis://master.production-invorto-redis.p7a5gs.aps1.cache.amazonaws.com:6379" \
+                  --arg S3T "invorto-production-transcripts" \
+                  --arg S3R "invorto-production-recordings" \
+                  --arg S3D "invorto-production-metrics" '
                 .containerDefinitions[0].image = $IMAGE
                 | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
                 | .containerDefinitions[0].environment = (
                     ( .containerDefinitions[0].environment // [] )
-                    | map(select(.name as $n | ($n != "PUBLIC_BASE_URL" and $n != "API_BASE_URL" and $n != "REALTIME_WS_URL" and $n != "WEBHOOK_BASE_URL" and $n != "TELEPHONY_WEBHOOK_BASE_URL" and $n != "SERVICE_NAME")))
+                    | map(select(.name as $n | ($n != "PUBLIC_BASE_URL" and $n != "API_BASE_URL" and $n != "REALTIME_WS_URL" and $n != "WEBHOOK_BASE_URL" and $n != "TELEPHONY_WEBHOOK_BASE_URL" and $n != "SERVICE_NAME" and $n != "REDIS_URL" and $n != "S3_BUCKET_TRANSCRIPTS" and $n != "S3_BUCKET_RECORDINGS" and $n != "S3_BUCKET_DOCUMENTS")))
                     + [
                       {name:"PUBLIC_BASE_URL", value:"https://api.invortoai.com"},
                       {name:"API_BASE_URL", value:"https://api.invortoai.com/v1"},
                       {name:"REALTIME_WS_URL", value:"wss://api.invortoai.com/realtime/voice"},
                       {name:"WEBHOOK_BASE_URL", value:"https://api.invortoai.com/webhooks"},
                       {name:"TELEPHONY_WEBHOOK_BASE_URL", value:"https://api.invortoai.com/telephony"},
-                      {name:"SERVICE_NAME", value:$SERVICE_NAME}
+                      {name:"SERVICE_NAME", value:$SERVICE_NAME},
+                      {name:"REDIS_URL", value:$REDIS_URL},
+                      {name:"S3_BUCKET_TRANSCRIPTS", value:$S3T},
+                      {name:"S3_BUCKET_RECORDINGS", value:$S3R},
+                      {name:"S3_BUCKET_DOCUMENTS", value:$S3D}
                     ]
                   )
               ')
@@ -462,22 +474,16 @@ jobs:
           fi
 
           # Deploy all services sequentially to avoid conflicts
+          # Temporarily forcing redeployment of all services to pick up new Redis/S3 config
+          REDEPLOY_ALL="true"
           for service in api realtime webhooks workers telephony-ecs; do
-            if [[ "$service" == "api" && "${{ steps.api-health-check.outputs.skip_api }}" == "true" ]]; then
-              echo "⏭️  Skipping production-api deployment (already healthy)"
-            elif [[ "$service" == "realtime" && "${{ steps.realtime-health-check.outputs.skip_realtime }}" == "true" ]]; then
-              echo "⏭️  Skipping production-realtime deployment (already healthy)"
-            elif [[ "$service" == "webhooks" && "${{ steps.webhooks-health-check.outputs.skip_webhooks }}" == "true" ]]; then
-              echo "⏭️  Skipping production-webhooks deployment (already healthy)"
-            else
-              echo "🔄 Deploying ${service}..."
-              update_service ${service} $CLUSTER_NAME
-              echo "Waiting for ${service} to stabilize..."
-              aws ecs wait services-stable \
-                --cluster $CLUSTER_NAME \
-                --services production-${service} \
-                --region ${{ env.AWS_REGION }}
-            fi
+            echo "🔄 Deploying ${service} (forced redeployment for Redis/S3 config update)..."
+            update_service ${service} $CLUSTER_NAME
+            echo "Waiting for ${service} to stabilize..."
+            aws ecs wait services-stable \
+              --cluster $CLUSTER_NAME \
+              --services production-${service} \
+              --region ${{ env.AWS_REGION }}
           done
       
       - name: Run smoke tests

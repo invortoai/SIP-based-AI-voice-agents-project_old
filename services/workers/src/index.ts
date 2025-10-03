@@ -30,7 +30,7 @@ await initializeObservability({
 const structuredLogger = new StructuredLogger("workers-service");
 const piiRedactor = new PIIRedactor();
 
-const redisUrl = await getSecret("REDIS_URL") || process.env.REDIS_URL || "redis://localhost:6379";
+const redisUrl = await getSecret("REDIS_URL") || process.env.REDIS_URL || "redis://master.production-invorto-redis.p7a5gs.aps1.cache.amazonaws.com:6379";
 const redis: RedisType = new (Redis as any)(redisUrl);
 const s3 = new S3Client({ region: process.env.AWS_REGION || 'ap-south-1' });
 const ses = new SESClient({ region: process.env.AWS_REGION || 'ap-south-1' });
@@ -41,7 +41,7 @@ const redisQ: RedisType = new (Redis as any)(redisUrl);
 async function getBucketNames() {
   const recordingsBucket = process.env.S3_BUCKET_RECORDINGS || await getSecret('S3_BUCKET_RECORDINGS') || 'invorto-production-recordings';
   const transcriptsBucket = process.env.S3_BUCKET_TRANSCRIPTS || await getSecret('S3_BUCKET_TRANSCRIPTS') || 'invorto-production-transcripts';
-  const documentsBucket = process.env.S3_BUCKET_DOCUMENTS || await getSecret('S3_BUCKET_DOCUMENTS') || 'invorto-production-documents';
+  const documentsBucket = process.env.S3_BUCKET_DOCUMENTS || await getSecret('S3_BUCKET_DOCUMENTS') || 'invorto-production-metrics';
 
   return {
     recordings: recordingsBucket,
@@ -66,10 +66,11 @@ async function main() {
   
   healthChecker.addCheck("s3", async () => {
     try {
-      await s3.send(new PutObjectCommand({ 
-        Bucket: process.env.S3_BUCKET_TRANSCRIPTS || "invorto-transcripts", 
-        Key: "health-check.txt", 
-        Body: "health" 
+      const buckets = await getBucketNames();
+      await s3.send(new PutObjectCommand({
+        Bucket: buckets.transcripts,
+        Key: "health-check.txt",
+        Body: "health"
       }));
       return true;
     } catch {
@@ -80,61 +81,112 @@ async function main() {
   // Heartbeat monitor with observability
   setInterval(async () => {
     const span = createSpan("worker_heartbeat");
+    let now = "";
+    let buckets: any = null;
     try {
-      const now = new Date().toISOString();
-      const bucket = process.env.S3_BUCKET_TRANSCRIPTS || "invorto-transcripts";
-      await s3.send(
-        new PutObjectCommand({ Bucket: bucket, Key: `heartbeats/${now}.txt`, Body: now })
-      );
-      
+      now = new Date().toISOString();
+      buckets = await getBucketNames();
+      const bucket = buckets.transcripts;
+      structuredLogger.info("Heartbeat target bucket", { bucket, timestamp: now });
+
+      // Test S3 connectivity first
+      try {
+        const testKey = `test-${Date.now()}.txt`;
+        const testCommand = new PutObjectCommand({
+          Bucket: bucket,
+          Key: testKey,
+          Body: "test"
+        });
+        await s3.send(testCommand);
+        structuredLogger.info("S3 connectivity test passed", { bucket, testKey });
+      } catch (testErr) {
+        structuredLogger.error("S3 connectivity test failed", {
+          error: (testErr as Error).message,
+          bucket,
+          region: process.env.AWS_REGION
+        });
+        throw testErr;
+      }
+
+      const putCommand = new PutObjectCommand({
+        Bucket: bucket,
+        Key: `heartbeats/${now}.txt`,
+        Body: now
+      });
+
+      structuredLogger.info("About to send S3 PutObjectCommand", { bucket, key: `heartbeats/${now}.txt`, bodyLength: now.length });
+      const result = await s3.send(putCommand);
+      structuredLogger.info("S3 PutObjectCommand completed", { etag: result.ETag, versionId: result.VersionId });
+
       customMetrics.incrementCounter("worker_heartbeats");
-      structuredLogger.debug("Heartbeat written", { timestamp: now });
+      structuredLogger.info("Heartbeat written successfully", { timestamp: now, bucket });
     } catch (err) {
       recordException(err as Error, span);
-      structuredLogger.error("Failed to write heartbeat", err  as Error);
+      structuredLogger.error("Heartbeat S3 write failed", {
+        error: (err as Error).message,
+        name: (err as Error).name,
+        code: (err as any)?.code,
+        statusCode: (err as any)?.statusCode,
+        bucket: buckets?.transcripts,
+        timestamp: now,
+        awsRegion: process.env.AWS_REGION,
+        s3ClientRegion: s3.config.region
+      });
     } finally {
       span.end();
     }
   }, 10000);
 
-  // Webhook queue worker with observability
+  // Webhook queue worker with observability and memory management
   (async function webhookWorker() {
     structuredLogger.info("Webhook worker started");
-    
+
+    // Memory cleanup interval
+    const cleanupInterval = setInterval(() => {
+      // Force garbage collection if available
+      if (global.gc) {
+        global.gc();
+      }
+    }, 30000); // Every 30 seconds
+
     while (true) {
       const workerSpan = createSpan("webhook_process");
       try {
         const job = await redisQ.brpop("webhooks:queue", 5);
         if (!job) continue;
-        
+
         const [, raw] = job;
         try {
           const data = JSON.parse(raw);
-          
+
           // Redact PII from webhook body
           if (data.body) {
             const parsedBody = JSON.parse(data.body);
             const sanitizedBody = piiRedactor.redact(parsedBody);
             data.body = JSON.stringify(sanitizedBody);
           }
-          
+
           const res = await fetch(data.url, {
             method: "POST",
             headers: data.headers,
             body: data.body,
             signal: AbortSignal.timeout(10000) // 10 second timeout
           });
-          
+
           if (!res.ok) {
             data.attempts = (data.attempts ?? 0) + 1;
-            
+
             if (data.attempts < 3) {
               // Retry with exponential backoff
               const delay = Math.min(1000 * Math.pow(2, data.attempts), 30000);
               setTimeout(async () => {
-                await redisQ.lpush("webhooks:queue", JSON.stringify(data));
+                try {
+                  await redisQ.lpush("webhooks:queue", JSON.stringify(data));
+                } catch (retryErr) {
+                  structuredLogger.error("Failed to requeue webhook", retryErr as Error);
+                }
               }, delay);
-              
+
               customMetrics.incrementCounter("webhook_retries");
               structuredLogger.warn("Webhook failed, retrying", {
                 url: data.url,
@@ -142,7 +194,11 @@ async function main() {
                 status: res.status
               });
             } else {
-              await redisQ.lpush("webhooks:dlq", JSON.stringify(data));
+              try {
+                await redisQ.lpush("webhooks:dlq", JSON.stringify(data));
+              } catch (dlqErr) {
+                structuredLogger.error("Failed to move webhook to DLQ", dlqErr as Error);
+              }
               customMetrics.incrementCounter("webhook_dlq");
               structuredLogger.error("Webhook moved to DLQ", {
                 url: data.url,
@@ -155,7 +211,11 @@ async function main() {
           }
         } catch (err) {
           // DLQ on parse or network error
-          await redisQ.lpush("webhooks:dlq", raw);
+          try {
+            await redisQ.lpush("webhooks:dlq", raw);
+          } catch (dlqErr) {
+            structuredLogger.error("Failed to move webhook to DLQ", dlqErr as Error);
+          }
           customMetrics.incrementCounter("webhook_errors");
           structuredLogger.error("Webhook processing error", err  as Error);
         }
@@ -167,6 +227,8 @@ async function main() {
         workerSpan.end();
       }
     }
+
+    clearInterval(cleanupInterval);
   })();
   
   // Call analytics worker

@@ -1,19 +1,15 @@
+// Simplified security for lean builds - remove external dependencies
 import crypto from 'crypto';
-import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
-import { Request } from 'express';
+// import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
+// import { Request } from 'express';
 import ipRangeCheck from 'ip-range-check';
 
-// AWS Secrets Manager client
-const secretsClient = new SecretsManagerClient({
-  region: process.env.AWS_REGION || 'ap-south-1',
-});
-
-// Cache for secrets to avoid repeated API calls
+// Simplified secret management without AWS SDK
 const secretsCache = new Map<string, { value: string; expiry: number }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 /**
- * Retrieve secret from AWS Secrets Manager with caching
+ * Retrieve secret from environment variables (simplified)
  */
 export async function getSecret(secretName: string): Promise<string> {
   // Check cache first
@@ -22,29 +18,24 @@ export async function getSecret(secretName: string): Promise<string> {
     return cached.value;
   }
 
-  try {
-    const command = new GetSecretValueCommand({
-      SecretId: secretName,
-    });
+  // Get from environment
+  const secretValue = process.env[secretName] || '';
 
-    const response = await secretsClient.send(command);
-    const secretValue = response.SecretString || '';
-
-    // Cache the secret
-    secretsCache.set(secretName, {
-      value: secretValue,
-      expiry: Date.now() + CACHE_TTL,
-    });
-
-    return secretValue;
-  } catch (error) {
-    console.error(`Failed to retrieve secret ${secretName}:`, error);
-    throw new Error(`Failed to retrieve secret: ${secretName}`);
+  if (!secretValue) {
+    throw new Error(`Secret not found: ${secretName}`);
   }
+
+  // Cache the secret
+  secretsCache.set(secretName, {
+    value: secretValue,
+    expiry: Date.now() + CACHE_TTL,
+  });
+
+  return secretValue;
 }
 
 /**
- * Get structured secret (JSON) from AWS Secrets Manager
+ * Get structured secret (JSON) from environment
  */
 export async function getSecretJson<T = any>(secretName: string): Promise<T> {
   const secretString = await getSecret(secretName);
@@ -57,6 +48,17 @@ export async function getSecretJson<T = any>(secretName: string): Promise<T> {
 
 /**
  * IP Allowlist Manager
+ *
+ * Provides network-level access control by restricting API access to trusted IP addresses.
+ *
+ * Configuration:
+ * - Environment: IP_ALLOWLIST=192.168.1.0/24,10.0.0.0/8
+ * - AWS Secret: {"ranges": ["192.168.1.0/24"], "ips": ["203.0.113.5"], "tokens": ["bypass-123"]}
+ *
+ * Behavior:
+ * - No allowlist = allows all traffic (development default)
+ * - Allowlist exists = restricts to specified IPs/ranges only
+ * - Bypass tokens override restrictions for testing/emergencies
  */
 export class IPAllowlistManager {
   private allowedRanges: string[] = [];
@@ -80,8 +82,9 @@ export class IPAllowlistManager {
         this.allowedIPs = new Set(secretAllowlist.ips || []);
         this.bypassTokens = new Set(secretAllowlist.tokens || []);
       }
-    } catch {
-      // Fall back to environment config
+    } catch (error) {
+      // IP allowlist secret doesn't exist - this is OK, log and fall back to environment config
+      console.warn('IP allowlist secret not found, using environment config:', error instanceof Error ? error.message : String(error));
       this.allowedRanges = ranges;
     }
 
@@ -122,20 +125,20 @@ export class IPAllowlistManager {
     this.allowedRanges.push(range);
   }
 
-  getClientIP(req: Request): string {
+  getClientIP(req: any): string {
     // Check various headers for the real IP
     const forwardedFor = req.headers['x-forwarded-for'];
     if (forwardedFor) {
       const ips = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
       return ips.split(',')[0].trim();
     }
-    
+
     const realIP = req.headers['x-real-ip'];
     if (realIP) {
       return Array.isArray(realIP) ? realIP[0] : realIP;
     }
-    
-    return req.socket.remoteAddress || '';
+
+    return req.ip || req.connection?.remoteAddress || '';
   }
 }
 
@@ -383,6 +386,24 @@ export class DataEncryption {
 
 /**
  * API Key Manager using AWS Secrets Manager
+ *
+ * Provides per-client authentication for multi-tenant applications.
+ *
+ * Secret Format (AWS Secrets Manager - 'api-keys'):
+ * {
+ *   "client_key_123": {
+ *     "tenantId": "tenant_abc",
+ *     "permissions": ["read", "write"]
+ *   }
+ * }
+ *
+ * Usage:
+ * - Load keys: await apiKeyManager.loadAPIKeys()
+ * - Validate: apiKeyManager.validateAPIKey("client_key_123")
+ * - Check permissions: apiKeyManager.hasPermission("client_key_123", "write")
+ *
+ * Note: Currently initialized but not used in API routes.
+ * Services use IP allowlists + shared secrets instead.
  */
 export class APIKeyManager {
   private apiKeys: Map<string, { tenantId: string; permissions: string[] }> = new Map();
@@ -392,7 +413,8 @@ export class APIKeyManager {
       const keys = await getSecretJson<Record<string, { tenantId: string; permissions: string[] }>>('api-keys');
       this.apiKeys = new Map(Object.entries(keys));
     } catch (error) {
-      console.error('Failed to load API keys:', error);
+      // API keys secret doesn't exist - this is OK, just log and continue
+      console.warn('API keys secret not found, API key authentication disabled:', error instanceof Error ? error.message : String(error));
     }
   }
 

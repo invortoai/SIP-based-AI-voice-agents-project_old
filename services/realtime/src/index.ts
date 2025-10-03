@@ -52,7 +52,10 @@ if ((process.env.NODE_ENV || "") !== "test") {
   });
 }
 
-app.get("/health", async () => ({ ok: true }));
+// Health check endpoint - simple response for container health checks
+app.get("/health", async (req, reply) => {
+  return reply.code(200).send('OK');
+});
 
 // Prometheus metrics
 const registry = new client.Registry();
@@ -71,7 +74,7 @@ app.get("/metrics", async (req, reply) => {
 
 type Conn = { socket: WebSocket; connectedAt: number; lastActivity: number };
 
-// Connection tracking for monitoring and limits
+// Connection tracking for monitoring and limits with size limits
 const activeConnections = new Map<string, Set<Conn>>();
 const MAX_CONNECTIONS_PER_CALL = parseInt(process.env.MAX_CONNECTIONS_PER_CALL || "5");
 const CONNECTION_TIMEOUT = parseInt(process.env.CONNECTION_TIMEOUT || "300000"); // 5 minutes
@@ -80,6 +83,7 @@ const REALTIME_ALLOW_MULTI = (process.env.REALTIME_ALLOW_MULTI || "0") === "1";
 const REALTIME_WS_SECRET = process.env.REALTIME_WS_SECRET || "";
 const REALTIME_WS_TTL = parseInt(process.env.REALTIME_WS_TTL || "60"); // seconds
 const messageCounts = new Map<string, { count: number; resetTime: number }>();
+const MAX_MESSAGE_COUNTS = 50000; // Limit message counts map size
 
 function getAllowedHost(): string | null {
   try {
@@ -219,6 +223,16 @@ function checkConnectionLimit(callId: string): boolean {
 function checkRateLimit(callId: string): boolean {
   const now = Date.now();
   const clientKey = callId;
+
+  // Clean up old entries periodically to prevent memory leaks
+  if (messageCounts.size > MAX_MESSAGE_COUNTS) {
+    for (const [key, data] of messageCounts.entries()) {
+      if (now > data.resetTime) {
+        messageCounts.delete(key);
+      }
+    }
+  }
+
   const clientData = messageCounts.get(clientKey);
 
   if (!clientData) {
