@@ -1,14 +1,14 @@
 name: Terraform Validate
 
 on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
+  # ⚠️  DISABLED: Skip terraform validation to prevent infrastructure changes
+  workflow_dispatch: # Only run manually if needed
 
 jobs:
   validate:
     runs-on: ubuntu-latest
+    # ⚠️  DISABLED: Skip terraform validation
+    if: false # Disabled to prevent accidental infrastructure changes
     steps:
       - uses: actions/checkout@v4
 

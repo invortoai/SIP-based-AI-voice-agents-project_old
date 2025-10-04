@@ -1,19 +1,8 @@
 name: Build and Push Docker Images
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'services/**'
-      - 'packages/**'
-      - 'sdk/**'
-      - 'package*.json'
-      - 'tsconfig*.json'
-      - 'services/**/Dockerfile*'
-      - '.github/workflows/**'
-    tags:
-      - 'v*.*.*'
-  workflow_dispatch:
+  # ⚠️  DISABLED: Skip Docker builds to prevent deployment
+  workflow_dispatch: # Only run manually if needed
 
 permissions:
   contents: read
