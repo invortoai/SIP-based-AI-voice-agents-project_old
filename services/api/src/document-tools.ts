@@ -5,12 +5,26 @@ import mammoth from 'mammoth'; // For DOCX
 import { OpenAI } from 'openai';
 import { s3Artifacts } from './s3-helpers.js';
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE!
-);
+// Lazy initialization of Supabase client
+let supabase: any = null;
+function getSupabaseClient() {
+  if (!supabase) {
+    supabase = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_KEY!
+    );
+  }
+  return supabase;
+}
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// Lazy initialization of OpenAI client
+let openai: OpenAI | null = null;
+function getOpenAIClient() {
+  if (!openai) {
+    openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return openai;
+}
 
 // Supported document types and their processors
 const DOCUMENT_PROCESSORS: Record<string, (buffer: Buffer) => Promise<string>> = {
@@ -62,7 +76,7 @@ export async function setupDocumentTools(app: FastifyInstance) {
       const s3Url = await s3Artifacts.uploadDocument(callId, fileBuffer, s3Key);
 
       // Store document metadata in Supabase
-      const { data: doc, error } = await supabase
+      const { data: doc, error } = await getSupabaseClient()
         .from('call_documents')
         .insert({
           call_id: callId,
@@ -120,7 +134,7 @@ export async function setupDocumentTools(app: FastifyInstance) {
 
     try {
       // Get document chunks for this call
-      let queryBuilder = supabase
+      let queryBuilder = getSupabaseClient()
         .from('document_chunks')
         .select('content, metadata, similarity')
         .eq('call_id', callId);
@@ -130,7 +144,7 @@ export async function setupDocumentTools(app: FastifyInstance) {
       }
 
       // Use pgvector for semantic similarity search
-      const { data: chunks, error } = await supabase.rpc('search_document_chunks', {
+      const { data: chunks, error } = await getSupabaseClient().rpc('search_document_chunks', {
         query_embedding: await createEmbedding(query),
         call_id_filter: callId,
         document_type_filter: documentType || null,
@@ -177,7 +191,7 @@ export async function setupDocumentTools(app: FastifyInstance) {
     const { callId } = req.params as any;
 
     try {
-      const { data: docs, error } = await supabase
+      const { data: docs, error } = await getSupabaseClient()
         .from('call_documents')
         .select('id, filename, type, created_at, file_size, s3_url')
         .eq('call_id', callId)
@@ -197,7 +211,7 @@ export async function setupDocumentTools(app: FastifyInstance) {
     const { id } = req.params as any;
 
     try {
-      const { data: doc, error } = await supabase
+      const { data: doc, error } = await getSupabaseClient()
         .from('call_documents')
         .select('s3_key, filename, s3_url')
         .eq('id', id)
@@ -253,7 +267,7 @@ function getFileType(filename: string): string {
 
 async function createEmbedding(text: string): Promise<number[]> {
   try {
-    const response = await openai.embeddings.create({
+    const response = await getOpenAIClient().embeddings.create({
       model: 'text-embedding-3-small',
       input: text,
       encoding_format: 'float'
@@ -319,7 +333,7 @@ async function storeDocumentChunks(
   const chunkInserts = chunks.map(async (chunk) => {
     const embedding = await createEmbedding(chunk.content);
 
-    return supabase
+    return getSupabaseClient()
       .from('document_chunks')
       .insert({
         call_id: callId,

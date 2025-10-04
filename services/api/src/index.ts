@@ -1,3 +1,8 @@
+import dotenv from 'dotenv';
+
+// Load environment variables from .env file at the very beginning
+dotenv.config();
+
 /*  */import Fastify, { FastifyInstance } from "fastify";
 import { createClient } from '@supabase/supabase-js';
 import { z } from "zod";
@@ -77,7 +82,7 @@ let redis!: RedisType;
 // Initialize external deps before server starts listening
 app.addHook("onReady", async () => {
   const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE;
+   const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
   const redisUrlEnv = (await resolveSecret(process.env.AWS_SECRETS_REDIS_URL)) || process.env.REDIS_URL || "redis://localhost:6379";
 
   // In test runs, avoid opening real DB connections
@@ -906,7 +911,7 @@ function safeJson(v?: string) {
   try { return v ? JSON.parse(v) : null; } catch { return v ?? null; }
 }
 
-const PORT = Number(process.env.PORT || 8080);
+const PORT = Number(process.env.API_PORT || 8080);
 
 if (!process.env.JEST_WORKER_ID && (process.env.NODE_ENV || "") !== "test") {
   app.listen({ port: PORT, host: "0.0.0.0" }).catch((err) => {
