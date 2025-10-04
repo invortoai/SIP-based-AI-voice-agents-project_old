@@ -115,7 +115,7 @@ jobs:
         with:
           terraform_version: 1.7.5
       - name: Configure AWS credentials (OIDC) for Terraform backend
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           role-session-name: invorto-ci-terraform
@@ -199,7 +199,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           role-session-name: invorto-ci-build
@@ -251,7 +251,7 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           role-session-name: invorto-ci-staging
@@ -301,7 +301,7 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           role-session-name: invorto-ci-prod
